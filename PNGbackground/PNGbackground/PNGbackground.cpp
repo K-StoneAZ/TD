@@ -11,6 +11,9 @@
 #include <vector>
 #include <ctime>
 #include <queue>
+#include <algorithm>
+#include <random>
+
 
 #pragma comment(lib, "gdiplus.lib")
 
@@ -59,8 +62,12 @@ static float g_resource = 100.0f;
 static float g_resourcePerSecond = 0.0f;
 static float g_resourceTimer = 0.0f;
 static float g_resourceLast = 0.0f;
+// Kownledge Globals
+static size_t Ktype = 3;
+static size_t Ktier = 4;
 //Tower Globals
 static int g_TowerType = -1;
+std::vector<RectF> g_buildSlots; // Stores the rectangles
 bool isBlocked(int tileX, int tileY);
 // ------------------------------------------------------------
 // Back Buffer Initialization
@@ -83,47 +90,48 @@ void InitBackBuffer(HWND hwnd, int width, int height)
 // Path Overlay Parsing and Rendering
 // ------------------------------------------------------------
 static const char* g_pathData =
-"0000000000bbbbbbBBBBpppppBBBBBbbbb00000000000,"
-"0000000bbbbbBBBBBBBBpppppBBBBBBBBbbb000000000,"
-"0000000000bbbBBBBBBBBpppBBBBBBBBbbb0000000000,"
-"000000000000000bbbBBBpppppBBBbbbbbb0000000000,"
-"000000000000000000bbbBBBpppppBBBbbbbb00000000,"
-"000000000000000000000bbbBBBpppppBBBbbb0000000,"
-"000000000000000000000000bbbBBBpppppBBBbbb0000,"
-"00000000000000000000000000bbbBBBpppppBBBbbb00,"
-"00000000000000bbbbbbbbbbbbbbbbBBBpppppBBBbbb0,"
-"00000bbbbbbbbbBBBBBBpppppBBBBBBBBBBbbbbb00000,"
-"00000bbbbbbbbBBBBBBBpppppBBBBBBBBBBbbbbb00000,"
-"00000bbbbbbBBBBBBBBBpppppBBBBBBBBBBbbbbb00000,"
-"00000bbbbbBBBBBppppppppppBBBBBbbbbb0000000000,"
-"00000bbbbbbbBBBppppppppBBBBBbbbbb000000000000,"
-"00000bbbbbBBBppppppppBBBBbbbb0000000000000000,"
-"000bbbbbBppppppppBBBbbb0000000000000000000000,"
-"000bbbBBBpppKpBBBbbb0000000000000000000000000," //17
-"000bbBBpppppBBbb00000000000000000000000000000,"
-"000bbBBBBBBBbb0000000000000000000000000000000,"
-"0000bbBBBBBBBbb000000000000000000000000000000,"
-"000000bbBBBBBBBbb0000000000000000000000000000,"
-"00000000bbBBBBBBBbb00000000000000000000000000,"
-"0000000000bbBBBBBBBbb000000000000000000000000,"
-"0000000000000bbBBBBBBBbb000000000000000000000,"
-"0000000000000000bbBBBBBBBbb000000000000000000,"
-"00000000000000000bbbbbBBBppppBBBbbbbbb0000000,"
-"00000000000000000000k0bbbBBBpppppBBBbbb000000,"
-"00000000000000000000000000bbbBBBpppppBBBbbb00,"
-"000000000000000000000000000000bbbBBBpppppBBB0,"
-"0000000000000000000000bbbBBBpppppBBBbbb000000," //30
-"0000000000000000000bbbBBBppppBBBbbbb000000000,"
-"0000000000000000000000bbbBBBpppppBBBbbb000000,"
-"0000000000000000000000bbbBBBpppppBBBbbb000000,"
-"0000000000000000000000bbbBBBpppppBBBbbb000000,"
-"0000000000000000000000bbbBBBpppppBBBbbb000000";
+"00000bbbBBBBBBBBBBbbb000000000000000000000000,"
+"00000bbbbbBBBBBBBBBBbbbbbbb000000000000000000,"
+"00000000bbbbbbbBBBBBBBBBBbbbbbbb0000000000000,"
+"000000bbbbbbbbbbbbbbBBBBBBBBBBbbbbbbbb0000000,"
+"0bbbbbbBBBBBBBBBBBbbbbbbbbBBBBBBBBBBbbbbbbbb0,"
+"bbbbbBBBBBbbbbBBBBBBBBBBbbbbbbbbBBBBBBBBbbbbb,"
+"bbbbBBBBBbbbbbbbbbBBBBBBBBBbbbbbbbBBBBBBBBbbb,"
+"bbbBBBBBbbb00000bbbbBBBBBBBBBbbbbbbbbBBBBBBbb,"
+"0bbbBBBBBbbb0000bbbbbBBBBBBBBBbbbbbbbbBBBBBBb,"
+"00bbbBBBBBbbb00bbbbBBBBBBBBBBbbbbbbbbBBBBBBbb," //10
+"000bbbBBBBBbb0bbbBBBBBBBBBBbbbbbbbbBBBBBBBbbb,"
+"0000bbbBBBBBbbbbbbbbBBBBBBBBBBbbbBBBBBBBBbbbb,"
+"000000bbbBBBBBbbb0bbbbbbbBBBBBBBBBBBBBbbbbbbb,"
+"00000000bbbBBBBBbbb0000bbbbbBBBBBBBbbbbb00000,"
+"0000000000bbbBBBBBbbbbbbbbbbbbbbbbbbb00000000,"
+"000000000000bbbBBBBBBBBBBbbbbb000000000000000,"
+"000000bbbbbbbbbbbbbBBBBBBBKBbbbbb000000000000,"
+"00000bbbBBBBBbbbbbbbbBBBBBBBBBBbbbbbb00000000,"
+"000bbb0BBBBBBBBBBbbbbbbbbBBBBBBBBBBbbbbbbb000,"
+"00bbbBBBBBbbbbBBBBBbbb0bbbbbbbBBBBBBBBBBbbbbb," //20
+"0bbbBBBBBbbbbbbbBBBBBbbb0000bbbbbbBBBBBBBBBBb," 
+"bbbBBBBBbbb00bbbBBBBBbbb00000000bbbbbbbBBBBBb,"
+"bbBBBBBbbb00000bbbBBBBBbbbb000bbbbbbbbbBBBBBb,"
+"bBBBBBbbb0000000bbbbBBBBBbbbbbbbBBBBBBBBBBbbb,"
+"bBBBBBbbb00000bbbBBBBBBBBBBbbBBBBBBBBBBbbbbbb,"
+"bbbBBBBBbbb00000bbbbbbbBBBBBBBBBBBbbbbbbb0000,"
+"00bbbBBBBBbbb00000000bbbbbBBBBBBbbbbb00000000,"
+"0000bbbBBBBBbbb000000000bbbbbbbbbb00000000000,"
+"000000bbbBBBBBbbb0000000000000000000000000000,"
+"00000000bbbBBBBBBBBBBBBBBBBBBBBBBBBBbbbbbb000," //30
+"000000000bbbbbbbbbbbbbbbbbbbbbbBBBBBBBBBBbbb0,"
+"00000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbBBBBBbbb,"
+"00000000bbbBBBBBBBBBBBBBBBBBBBBBBBBBBBBBbbbb0,"
+"00000bbbBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbb000,"
+"000000bbbbBBBBbbb0000000000000000000000000000";
+
 
 struct Tile
 {
-    bool isPath;
-    bool isBuildable;
-    bool hasKnowledge;
+    bool isPath = false;
+    bool isBuildable = false;
+    bool hasKnowledge = false;
     int distToExit = -1;
     int pathWidth = 0;
 };
@@ -321,6 +329,134 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
         }
     }
 
+    //------------------------------------------------------------
+	// Knowledge System
+    //------------------------------------------------------------
+    struct Knowledge
+    {
+        bool unlocked = false;
+		bool Active = false;
+    };
+    struct WorldKnowledge
+    {
+        int tileX = 0;
+        int tileY = 0;
+        int type = 0;   // knowledge line (0..Ktype-1)
+        int tier = 0;   // tier (1..Ktier-1)
+        bool acquired = false;
+    };
+
+    std::vector<std::vector < Knowledge>> g_knowledge;
+	std::vector<Knowledge> g_acqKnow;  // Acquired knowledge
+    std::vector<WorldKnowledge> g_worldKnowledge;// Dynamic knowledge
+
+	size_t idx(int type, int tier) //column centric indexing
+    {
+        return static_cast<size_t>(tier) * Ktype
+            + static_cast<size_t>(type);
+    }
+    void InitKnowledge()
+    {
+		g_acqKnow.clear();
+        g_knowledge.clear();
+
+        // Prepare 2D grid
+        g_knowledge.resize(Ktype);
+
+        // Reserve flat vector capacity to avoid reallocations
+        g_acqKnow.resize(Ktype * Ktier);
+
+        for (int line = 0; line < Ktype; ++line)
+        {
+            g_knowledge[line].resize(Ktier);
+            for (int tier = 0; tier < Ktier; ++tier)
+            {
+                // Tier 0 = base tower, always unlocked
+                if (tier == 0)
+                {
+                    g_knowledge[line][tier].unlocked = true;
+                    g_knowledge[line][tier].Active = true;
+                }
+                else
+                {
+                    g_knowledge[line][tier].unlocked = false;
+                    g_knowledge[line][tier].Active = false;
+                }
+                // Append to flat acquired-knowledge vector in the same order
+                g_acqKnow[idx(line, tier)] = g_knowledge[line][tier];
+            }
+        }
+    }
+    void AssignWorldKnowledge()
+    {
+        g_worldKnowledge.clear();
+        std::vector<std::pair<int, int>> sockets;
+        // Collect all knowledge-capable tiles
+        for (int y = 0; y < GRID_ROWS; ++y)
+        {
+            for (int x = 0; x < GRID_COLS; ++x)
+            {
+                if (g_pathGrid[y][x].hasKnowledge)
+                {
+                    sockets.push_back({ x, y });
+                }
+            }
+        }
+        // Shuffle sockets for randomness
+        std::shuffle(sockets.begin(), sockets.end(), std::mt19937(g_rngSeed));
+        // Build a pool of available knowledge (exclude tier 0)
+        std::vector<std::pair<int, int>> pool;
+        for (int type = 0; type < (int)Ktype; ++type)
+        {
+            for (int tier = 1; tier < (int)Ktier; ++tier)
+            {
+                pool.push_back({ type, tier });
+            }
+        }
+        std::shuffle(pool.begin(), pool.end(), std::mt19937(g_rngSeed + 1));
+        int count = min(sockets.size(), pool.size());
+        for (int i = 0; i < count; ++i)
+        {
+            WorldKnowledge wk;
+            wk.tileX = sockets[i].first;
+            wk.tileY = sockets[i].second;
+            wk.type = pool[i].first;
+            wk.tier = pool[i].second;
+
+            g_worldKnowledge.push_back(wk);
+        }
+    }
+    void UnlockKnowledge(int type, int tier) {
+        if (!g_knowledge[type][tier].unlocked) {
+            g_knowledge[type][tier].unlocked = true;
+            g_acqKnow[idx(type, tier)] = g_knowledge[type][tier];
+        }
+    }
+    void ActivateKnowledge(int type, int tier) {
+        if (tier > 1 && tier < 4) {
+            switch (tier)
+            {
+            case 1:
+                g_knowledge[type][tier].Active = true;
+                g_acqKnow[idx(type,tier)].Active = g_knowledge[type][tier].Active;
+                break;
+            case 2:
+                if (g_knowledge[type][1].unlocked)
+                {
+                    g_knowledge[type][tier].Active = true;
+                    g_acqKnow[idx(type, tier)].Active = g_knowledge[type][tier].Active;
+                }
+                break;
+            case 3:
+                if (g_knowledge[type][2].unlocked && g_knowledge[type][1].unlocked)
+                {
+                    g_knowledge[type][tier].Active = true;
+                    g_acqKnow[idx(type, tier)].Active = g_knowledge[type][tier].Active;
+                }
+            }
+        }
+    }
+
 	// ------------------------------------------------------------
     // Enemy
 	// ------------------------------------------------------------
@@ -401,10 +537,11 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
         ExitProcess(1);
     }
 
-    bool FindNextPathTile(int x, int y, int& outX, int& outY, int prevDX, int prevDY, int& outDX, int& outDY)
+    bool FindNextPathTile(int x, int y, int& outX, int& outY, int prevDX, int prevDY, int& outDX, int& outDY, int idx)
     {
                 float bestScore = 1e9f;
                 bool found = false;
+				int cCount = 0;
 
                 const int dx[4] = { 1, 0, -1, 0 };
                 const int dy[4] = { 0, 1, 0, -1 };
@@ -431,6 +568,7 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
                     if (distDelta > 0)
                         continue;
 
+					cCount++;
                     // ---- scoring ----
                     float score = 0.0f;
 
@@ -442,10 +580,13 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
                         score += 2.5f;
 
                     // 3. Prefer wider paths
-                    score -= t.pathWidth * 1.2f;
+                    float Bias =
+                        ((nx * 17 + ny * 31) & 3) * 0.25f;
+                    score -= (t.pathWidth + Bias ) * 1.2f;
 
                     // 4. Tiny deterministic bias breaker
-                    score += (dx[i] * 0.01f + dy[i] * 0.02f);
+                    unsigned int bias = (unsigned int)(idx * 97 + nx * 17 + ny * 31);
+                    score += (bias & 5) * 1.0f;
 
                     if (!found || score < bestScore)
                     {
@@ -457,7 +598,12 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
                         found = true;
                     }
                 }
-
+                if(found){
+                    if (cCount <= 1) {
+                        outDX = prevDX;
+						outDY = prevDY;
+                    }
+                }
                 return found;
 }
 
@@ -512,9 +658,10 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
         float dx = targetX - e.x;
         float dy = targetY - e.y;
         float dist = sqrtf(dx * dx + dy * dy);
+        int oldDX = e.prevDX;
+		int oldDY = e.prevDY;
 
         float move = e.speed * dt;
-
         // ---- arrive at tile ----
         if (move >= dist)
         {
@@ -527,16 +674,17 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
 
             int outDX = 0;
             int outDY = 0;
+            int idx = &e - &g_enemies[0];  // compute index in vector
 
             if (FindNextPathTile(
                 e.tileX, e.tileY,
                 e.nextTileX, e.nextTileY,
                 e.prevDX, e.prevDY,
-                outDX, outDY))
+                outDX, outDY, idx))
             {
-                // update direction memory
-                e.prevDX = outDX;
-                e.prevDY = outDY;
+                // Only update intent if a real decision happened
+                    e.prevDX = outDX;
+                    e.prevDY = outDY;
             }
             else
             {
@@ -622,6 +770,8 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
 		int type;              // tower type ID
         int level;             // tier 0-4
         float range;           // pixels
+		float InfRadius;       // Influence radius
+        bool inInf;            // inside radius
         float attackPower;     // HP per attack
         float attackRate;      // attacks per second
 		float attackCooldown;  // time until next attack
@@ -662,6 +812,7 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
             // Siphon Tower
         case 0:
             t.range = 100.f;
+			t.InfRadius = 80.f;
             t.attackPower = 0.f;  // resource per attack
             t.HP = 80;
             t.maxHP = t.HP;
@@ -674,6 +825,7 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
             // Barrier Tower
         case 1:
             t.range = 0.f;
+			t.InfRadius = 0.f;
             t.attackPower = 0.0f;
             t.HP = 300;
             t.maxHP = t.HP;
@@ -686,6 +838,7 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
             // Attack Tower
         case 2:
             t.range = 80.f;
+            t.InfRadius = 0.f;
             t.attackPower = 1.f;
 			t.attackRate = 1.0f; // attacks per second
             t.HP = 100;
@@ -698,11 +851,12 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
 
         default: // fallback
             t.range = 0.f;
+            t.InfRadius = 0.f;
             t.attackPower = 0.f;
             t.HP = 1;
             t.costTotal = 1.0f;
             t.ammoPerAttack = 1.0f;
-            t.color = Gdiplus::Color(255, 255, 255, 255);
+            t.color = Gdiplus::Color(128, 255, 255, 255);
             break;
         }
     }
@@ -748,9 +902,80 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
         return PlaceTowerAt(tileX, tileY);
     }
 
+    void UpdateInfluence()
+    {
+        for (auto& t : g_towers)
+            t.inInf = false;
+
+        for (const auto& src : g_towers)
+        {
+            if (src.InfRadius <= 0) continue;
+
+            float r2 = src.InfRadius * src.InfRadius;
+
+            for (auto& t : g_towers)
+            {
+                float dx = t.x - src.x;
+                float dy = t.y - src.y;
+                if (dx * dx + dy * dy <= r2)
+                    t.inInf = true;
+            }
+        }
+    }
+    bool IsTileInInfluence(int tileX, int tileY)
+    {
+        float cx = TileCenterX(tileX);
+        float cy = TileCenterY(tileY);
+
+        for (const auto& t : g_towers)
+        {
+            if (!t.operational || t.InfRadius <= 0.0f)
+                continue;
+
+            float dx = cx - t.x;
+            float dy = cy - t.y;
+            if (dx * dx + dy * dy <= t.InfRadius * t.InfRadius)
+                return true;
+        }
+        return false;
+    }
+    void DrawInfluenceOverlay(HDC hdc)
+    {
+        Graphics g(hdc);
+
+        // Soft tint. Low alpha.
+        SolidBrush wash(Color(60, 120, 200, 255)); // bluish, subtle
+
+        for (int y = 0; y < GRID_ROWS; ++y)
+        {
+            for (int x = 0; x < GRID_COLS; ++x)
+            {
+                const Tile& tile = g_pathGrid[y][x];
+                if (!tile.isBuildable)
+                    continue;
+
+                if (!IsTileInInfluence(x, y))
+                    continue;
+
+                REAL px = x * CELL_SIZE;
+                REAL py = y * CELL_SIZE;
+                g.FillRectangle(&wash, static_cast<INT>(px), static_cast<INT>(py), CELL_SIZE, CELL_SIZE);
+            }
+        }
+    }
     void UpdateTower(Tower& t, float dt)
     {
+		// inside influence
+        if (!t.inInf) {
+            return;
+		}
         // --- 1. Build phase: consume resources to complete tower ---
+        bool needsInfluence =
+            !(t.type == 0 && t.costPaid < t.costTotal); // siphon exception
+
+        if (needsInfluence && !t.inInf)
+            return;
+
         if (t.costPaid < t.costTotal)
         {
             // Amount of resource to allocate this frame
@@ -790,7 +1015,7 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
 
         // --- 3. Resource-based ammo accumulation ---
         // Example: siphon a small amount of global resource to refill ammo
-        if (t.ammo < t.maxAmmo)
+        if (t.inInf && t.ammo < t.maxAmmo)
         {
             float ammoGain = 0.5f; // example: units/frame
             if (g_resource >= ammoGain)
@@ -838,7 +1063,33 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
             }
         }
     }
+    void CheckKnowledgeUnlock()
+    {
+        for (const auto& tower : g_towers)
+        {
+            if (tower.type != 0 || !tower.operational) // only siphon towers
+                continue;
 
+            float r2 = tower.InfRadius * tower.InfRadius;
+
+            for (auto& wk : g_worldKnowledge)
+            {
+                if (wk.acquired) continue;  // already unlocked
+
+                float dx = TileCenterX(wk.tileX) - tower.x;
+                float dy = TileCenterY(wk.tileY) - tower.y;
+
+                if (dx * dx + dy * dy <= r2)
+                {
+                    // Unlock knowledge and remove visual indicator
+                    UnlockKnowledge(wk.type, wk.tier);
+                    ActivateKnowledge(wk.type, wk.tier);
+                    g_pathGrid[wk.tileY][wk.tileX].hasKnowledge = false;
+                    wk.acquired = true;
+                }
+            }
+        }
+    }
     void UpdateBullets(float dt)
     {
         for (int i = (int)g_bullets.size() - 1; i >= 0; --i)
@@ -922,7 +1173,6 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
             g.DrawRectangle(&border, left, top, width, height);
 
             // --- Optional: ammo bar overlay ---
-            // --- Ammo bar ABOVE tower ---
             if (tower.operational && tower.maxAmmo > 0.0f)
             {
                 float ammoRatio = 0.0f;
@@ -992,37 +1242,52 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
 
     void DrawHoverHighlight(HDC hdc)
     {
-        if (g_hoverTileX < 0 || g_hoverTileY < 0) return;
-
-        const Tile& tile = g_pathGrid[g_hoverTileY][g_hoverTileX];
-        if (!tile.isBuildable) return;
-
-        // Get color from a prototype tower of the selected type
-        Tower proto = GetTowerPrototype(g_TowerType);
-
         Graphics g(hdc);
-        SolidBrush brush(proto.color);
 
-        const REAL padding = 2.0f;
-        REAL x = g_hoverTileX * static_cast<REAL>(CELL_SIZE) + padding;
-        REAL y = g_hoverTileY * static_cast<REAL>(CELL_SIZE) + padding;
-        REAL size = static_cast<REAL>(CELL_SIZE) - padding * 2;
+        if (g_hoverTileY >= 0)
+        {
+            // --- Existing grid tile hover ---
+            const Tile& tile = g_pathGrid[g_hoverTileY][g_hoverTileX];
+            if (!tile.isBuildable) return;
 
-        g.FillRectangle(&brush, x, y, size, size);
+            Tower proto = GetTowerPrototype(g_TowerType);
+            SolidBrush brush(proto.color);
 
-        // Optional border
-        Pen border(Color(255, 255, 255, 255), 2.0f);
-        g.DrawRectangle(&border, x, y, size, size);
+            const REAL padding = 2.0f;
+            REAL x = g_hoverTileX * static_cast<REAL>(CELL_SIZE) + padding;
+            REAL y = g_hoverTileY * static_cast<REAL>(CELL_SIZE) + padding;
+            REAL size = static_cast<REAL>(CELL_SIZE) - padding * 2;
 
-        // --- Draw range circle ---
-        Pen rangePen(Color(128, proto.color.GetRed(), proto.color.GetGreen(), proto.color.GetBlue()), 2.0f);
+            g.FillRectangle(&brush, x, y, size, size);
 
-        REAL centerX = TileCenterX(g_hoverTileX);
-        REAL centerY = TileCenterY(g_hoverTileY);
-        REAL radius = proto.range;
+            Pen border(Color(255, 255, 255, 255), 2.0f);
+            g.DrawRectangle(&border, x, y, size, size);
 
-        g.DrawEllipse(&rangePen, centerX - radius, centerY - radius, radius * 2, radius * 2);
+            // Draw range circle
+            Pen rangePen(Color(128, proto.color.GetRed(), proto.color.GetGreen(), proto.color.GetBlue()), 2.0f);
+            REAL centerX = TileCenterX(g_hoverTileX);
+            REAL centerY = TileCenterY(g_hoverTileY);
+            g.DrawEllipse(&rangePen, centerX - proto.range, centerY - proto.range, proto.range * 2, proto.range * 2);
+        }
+        else if (g_hoverTileY == -1 && g_hoverTileX >= 0 && g_hoverTileX < (int)g_buildSlots.size())
+        {
+            // --- HUD build square hover ---
+            const RectF& r = g_buildSlots[g_hoverTileX];
 
+            Pen border(Color(255, 255, 255, 255), 4.0f);
+            g.DrawRectangle(&border, r.X, r.Y, r.Width, r.Height);
+        }
+    }
+    struct HudPanel {
+		REAL x, y, w, h;
+    };
+    void DrawHudPanel(Graphics& g, const HudPanel& p)
+    {
+        SolidBrush bg(Color(180, 20, 20, 20));
+        Pen border(Color(200, 255, 255, 255), 1.5f);
+
+        g.FillRectangle(&bg, p.x, p.y, p.w, p.h);
+        g.DrawRectangle(&border, p.x, p.y, p.w, p.h);
     }
 
     void DrawHUD(HDC hdc)
@@ -1030,15 +1295,16 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
         Graphics g(hdc);
         const REAL hudTop = static_cast<REAL>(GAME_H);
         const REAL padding = 10.0f;
-        const REAL boxW = 220.0f;
-        const REAL boxH = 60.0f;
+        const REAL panelH = HUD_H - padding * 2;
+        const REAL panelW = (GAME_W - padding * 4) / 4.0f;
 
-        // Background panel
-        SolidBrush bg(Color(180, 20, 20, 20));
-        g.FillRectangle(&bg, padding, hudTop + padding, boxW, boxH);
+        HudPanel economy{ padding, hudTop + padding, panelW, panelH };
+        HudPanel build{ padding * 2 + panelW, hudTop + padding, panelW * 2, panelH };
+        HudPanel status{ padding * 3 + panelW * 3, hudTop + padding, panelW * 3, panelH };
 
-        Pen border(Color(200, 255, 255, 255), 1.5f);
-        g.DrawRectangle(&border, padding, hudTop + padding, boxW, boxH);
+        DrawHudPanel(g, economy);
+        DrawHudPanel(g, build);
+        DrawHudPanel(g, status);
 
         // Text formatting
         FontFamily ff(L"Segoe UI");
@@ -1054,7 +1320,7 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
         // Resource total
         swprintf_s(buffer, L"Resource: %.1f", g_resource);
         g.DrawString(buffer, -1, &font,
-            PointF(padding + 10.0f, hudTop + padding + 6.0f), &text);
+            PointF(economy.x + 10.0f, economy.y + 6.0f), &text);
 
         // Gain per second
         swprintf_s(buffer, L"%+.2f / sec", g_resourcePerSecond);
@@ -1063,7 +1329,69 @@ void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
             (g_resourcePerSecond >= 0.0f) ? gain : loss;
 
         g.DrawString(buffer, -1, &smallFont,
-            PointF(padding + 10.0f, hudTop + padding + 32.0f), &rateBrush);
+            PointF(economy.x + 10.0f, economy.y + 32.0f), &rateBrush);
+
+        // BUILD panel: single row of 10 fixed-size squares with equal padding
+        const int slots = min(10, static_cast<int>(g_acqKnow.size()));
+        const REAL slotSize = 26.0f;
+
+        // Uniform padding on left, right, and top
+        REAL paddingX = (build.w - slots * slotSize) / (slots + 1);
+        if (paddingX < 2.0f) paddingX = 2.0f; // safety clamp
+
+        REAL paddingY = 6.0f; // same top margin
+
+        REAL x = build.x + paddingX;
+        REAL y = build.y + paddingY;
+
+        Pen slotBorder(Color(200, 180, 180, 180), 1.5f);
+        SolidBrush unlockedBrush(Color(255, 120, 255, 120));
+        SolidBrush lockedBrush(Color(255, 180, 180, 180));
+
+        g_buildSlots.clear(); // clear old frame
+        for (int i = 0; i < slots; ++i)
+        {
+            SolidBrush& brush = g_acqKnow[i].Active ? unlockedBrush : lockedBrush;
+            g.FillRectangle(&brush, x, y, slotSize, slotSize);
+            g.DrawRectangle(&slotBorder, x, y, slotSize, slotSize);
+            // Store rectangle in vector
+            g_buildSlots.emplace_back(x, y, slotSize, slotSize);
+            x += slotSize + paddingX; // move to next block
+        }
+        // LIGHTS under build squares
+        const int lightCount = static_cast<int>(g_acqKnow.size());
+        const REAL lightSize = 8.0f;
+        const REAL lightSpacing = 5.0f;
+
+        REAL lightsY = y + slotSize + 10.0f; // 6 pixels below squares
+        x = build.x + paddingX;             // reset x to left start
+
+        Pen lightBorder(Color(200, 180, 180, 180), 1.0f);
+        SolidBrush grayBrush(Color(255, 100, 100, 100));
+        SolidBrush whiteBrush(Color(255, 255, 255, 255));
+
+        for (int i = 0; i < lightCount; ++i)
+        {
+            if (!g_acqKnow[i].unlocked)
+            {
+                // outlined only
+                g.DrawRectangle(&lightBorder, x, lightsY, lightSize, lightSize);
+            }
+            else if (g_acqKnow[i].Active)
+            {
+                g.FillRectangle(&whiteBrush, x, lightsY, lightSize, lightSize);
+            }
+            else
+            {
+                g.FillRectangle(&grayBrush, x, lightsY, lightSize, lightSize);
+            }
+
+            x += lightSize + lightSpacing; // move to next light
+        }
+
+        // STATUS panel header (reserved space)
+        g.DrawString(L"STATUS", -1, &smallFont,
+            PointF(status.x + 10.0f, status.y + 6.0f), &text);
     }
 
     bool isBlocked(int tileX, int tileY)
@@ -1105,6 +1433,7 @@ void RenderStaticWorld(HWND hwnd)
         HDC hdc = BeginPaint(hwnd, &ps);
         PatBlt(g_backDC, 0, 0, g_backW, g_backH, BLACKNESS);
 		RenderStaticWorld(hwnd);
+		DrawInfluenceOverlay(g_backDC);
 		DrawHUD(g_backDC);
         DrawTowers();
 		DrawContamination(g_backDC);
@@ -1132,6 +1461,7 @@ void RenderStaticWorld(HWND hwnd)
 
     void UpdateTowers(float dt)
     {
+		UpdateInfluence();
 		if (g_towers.empty()) { g_resource += 0.01f * dt; } // passive income when no towers
         for (auto& tower : g_towers)
         {
@@ -1256,6 +1586,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
         }
         UpdateTowers(g_deltaTime);
+        CheckKnowledgeUnlock();
 		UpdateBullets(g_deltaTime);
 		ApplyCorruptionDamage(g_deltaTime);
 		CleanupDestroyedTowers();
@@ -1274,6 +1605,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         if (wParam == '1') g_TowerType = 0; // Siphon
         if (wParam == '2') g_TowerType = 1; // Barrier
         if (wParam == '3') g_TowerType = 2; // Attack
+		if (wParam == VK_SPACE) // Pause
+		{
+			static bool isPaused = false;
+			isPaused = !isPaused;
+			if (isPaused)
+				KillTimer(hwnd, 1);
+			else
+				SetTimer(hwnd, 1, 16, nullptr);
+		}
         return 0;
     }
     case WM_MOUSEMOVE:
@@ -1281,22 +1621,35 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         int mx = GET_X_LPARAM(lParam);
         int my = GET_Y_LPARAM(lParam);
 
-        if (my >= GAME_H)
+        if (my < GAME_H)
         {
-            g_hoverTileX = -1;
-            g_hoverTileY = -1;
-            return 0;
+            // Hovering grid
+            g_hoverTileX = mx / CELL_SIZE;
+            g_hoverTileY = my / CELL_SIZE;
+
+            // Clamp to grid bounds
+            if (g_hoverTileX < 0) g_hoverTileX = 0;
+            if (g_hoverTileX >= GRID_COLS) g_hoverTileX = GRID_COLS - 1;
+            if (g_hoverTileY < 0) g_hoverTileY = 0;
+            if (g_hoverTileY >= GRID_ROWS) g_hoverTileY = GRID_ROWS - 1;
         }
-
-        g_hoverTileX = mx / CELL_SIZE;
-        g_hoverTileY = my / CELL_SIZE;
-
-        // Clamp to grid bounds
-        if (g_hoverTileX < 0) g_hoverTileX = 0;
-        if (g_hoverTileX >= GRID_COLS) g_hoverTileX = GRID_COLS - 1;
-        if (g_hoverTileY < 0) g_hoverTileY = 0;
-        if (g_hoverTileY >= GRID_ROWS) g_hoverTileY = GRID_ROWS - 1;
-
+        else
+        {
+			g_hoverTileX = -1;
+ 			g_hoverTileY = -1; // indicate HUD
+           // Hovering HUD build panel
+            for (size_t i = 0; i < g_buildSlots.size(); ++i)
+            {
+                const RectF& r = g_buildSlots[i];
+                if (mx >= r.X && mx <= r.X + r.Width &&
+                    my >= r.Y && my <= r.Y + r.Height)
+                {
+                    g_hoverTileX = static_cast<int>(i); // HUD index
+                    break;
+                }
+            }
+            // g_hoverTileY remains -1 to indicate HUD
+        }
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -1305,7 +1658,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         int mouseX = GET_X_LPARAM(lParam);
         int mouseY = GET_Y_LPARAM(lParam);
         if (mouseY >= GAME_H) {
-            return 0;   // HUD click (handled later if needed)
+            // Check if click is in the build panel squares
+            for (size_t i = 0; i < g_buildSlots.size(); ++i)
+            {
+                const RectF& r = g_buildSlots[i];
+                if (mouseX >= r.X && mouseX <= r.X + r.Width &&
+                    mouseY >= r.Y && mouseY <= r.Y + r.Height)
+                {
+                    // Tower square clicked
+                    if (g_acqKnow[i].unlocked)
+                        g_TowerType = static_cast<int>(i); // select this tower
+                    break; // only one square can be clicked
+                }
+            }
         }
         PlaceTowerAtMouse(mouseX, mouseY);
         return 0;
@@ -1399,6 +1764,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
 	BuildDistanceField();
     BuildPathWidthField();
     CollectSpawnPoints();
+    InitKnowledge();
+    AssignWorldKnowledge();
     // Spawn an enemy for testing
     for (int lvl = 0; lvl <= 4; ++lvl)
     {
