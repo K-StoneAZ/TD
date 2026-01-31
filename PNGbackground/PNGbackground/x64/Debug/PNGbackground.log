@@ -1,6 +1,6 @@
 ﻿  PNGbackground.cpp
-C:\Users\kston\source\repos\PNGbackground\PNGbackground\PNGbackground.cpp(417,19): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\kston\source\repos\PNGbackground\PNGbackground\PNGbackground.cpp(677,21): warning C4244: 'initializing': conversion from '__int64' to 'int', possible loss of data
-C:\Users\kston\source\repos\PNGbackground\PNGbackground\PNGbackground.cpp(960,25): warning C4244: 'initializing': conversion from 'int' to 'Gdiplus::REAL', possible loss of data
-C:\Users\kston\source\repos\PNGbackground\PNGbackground\PNGbackground.cpp(961,25): warning C4244: 'initializing': conversion from 'int' to 'Gdiplus::REAL', possible loss of data
+C:\Users\kston\source\repos\PNGbackground\PNGbackground\PNGbackground.cpp(426,15): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\kston\source\repos\PNGbackground\PNGbackground\PNGbackground.cpp(730,17): warning C4244: 'initializing': conversion from '__int64' to 'int', possible loss of data
+C:\Users\kston\source\repos\PNGbackground\PNGbackground\PNGbackground.cpp(1014,21): warning C4244: 'initializing': conversion from 'int' to 'Gdiplus::REAL', possible loss of data
+C:\Users\kston\source\repos\PNGbackground\PNGbackground\PNGbackground.cpp(1015,21): warning C4244: 'initializing': conversion from 'int' to 'Gdiplus::REAL', possible loss of data
   PNGbackground.vcxproj -> C:\Users\kston\source\repos\PNGbackground\x64\Debug\PNGbackground.exe
