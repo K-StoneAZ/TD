@@ -13,9 +13,11 @@
 #include <cwchar>
 #include <vector>
 #include <ctime>
+#include <fstream>
 #include <queue>
 #include <algorithm>
 #include <random>
+#include <string>
 
 
 #pragma comment(lib, "gdiplus.lib")
@@ -58,6 +60,16 @@ static const int GRID_ROWS = 35;
 static const int CELL_SIZE = 20;
 static int g_hoverTileX = -1;
 static int g_hoverTileY = -1;
+// Pathfinding globals
+std::vector<std::string> g_pathFiles;
+int g_pathIndex = 0;
+bool g_pathCompleted = false;
+// Wave globals
+float g_waveTime = 0.0f;
+bool  g_waveActive = false;
+static int g_minWave = 0; //min wave for this path
+static int g_maxWave = 0; //max wave for this path
+
 // Random seed
 static unsigned int g_rngSeed = 0;
 // Resource Globals
@@ -68,6 +80,7 @@ static float g_resourceLast = 0.0f;
 // Kownledge Globals
 static size_t Ktype = 3;
 static size_t Ktier = 4;
+static int g_Kcount = 9; // Kowledge available at start of game
 //Tower Globals
 static int g_TowerType = -1;
 std::vector<RectF> g_buildSlots; // Stores the rectangles
@@ -88,46 +101,45 @@ void InitBackBuffer(HWND hwnd, int width, int height)
 
     ReleaseDC(hwnd, windowDC);
 }
+// Path files list
+void LoadPathFiles()
+{
+    g_pathFiles.clear();
+
+        g_pathFiles.push_back("Path-0.txt");
+        g_pathFiles.push_back("Path-1.txt");
+        g_pathFiles.push_back("Path-2.txt");
+        g_pathFiles.push_back("Path-3.txt");
+        g_pathFiles.push_back("Path-4.txt");
+        g_pathFiles.push_back("Path-5.txt");
+
+		g_pathIndex = 0;
+}
 
 // ------------------------------------------------------------
 // Path Overlay Parsing and Rendering
 // ------------------------------------------------------------
-static const char* g_pathData =
-"bbbBBBBBBBBBBBBBBBbbb00000bbbbbbbbbbbb0000000,"
-"bbbBBBBBbbbbbbbbbbbb00bbbbbbBBBBBBBBbbbb00000,"
-"0bbbBBBBBbbbb0000000bbbbBBBBBBbbbbBBBBBbbb000,"
-"00bbbBBBBBBbbbb000bbbbBBBBBBbbbbbbbbBBBBBBbbb,"
-"000bbbbBBBBBBbbbbbbbBBBBBBbbbb00bbbBBBBBBbbb0,"
-"00000bbbbBBBBBBbbbBBBBBBbbbb000bbbBBBBBBbbb00,"
-"0000000bbbbbBBBBBBBBBBbbbb0000bbbBBBBBBbbb000,"
-"000000bbbbbbbbbBBBBBBbbbb000bbbBBBBBBbbb00000,"
-"00bbbbbbBBBBBBBBBbbbbbbbbbbbbBBBBBBbbb0000000,"
-"0bbbBBBBBBbbBBBBBBbbbbbbbbBBBBBBbbbbb00000000,"
-"00bbBBBBBBbbbbBBBBBBbbbBBBBBBbbbbb00000000000,"
-"0bbbBBBBBBbbbbbbbBBBBBBBBBbbbbbbBBBbbbbb00000,"
-"bbbBBBbbbbbb0000bbbbbbbbbbbbbBBBBBBBBBbbbbb00,"
-"0bbbBBBBBBBBBBBBBBbbbbbbbBBBBBBbbbbbBBBBBBbbb,"
-"bbbBBBBBBbbbbbbBBBBBBbbbbBBBBbbbbbbbbBBBBBBbb,"
-"00bbbbBBBBBBbbbbbbBBBBBBbbBBBBBBbbb0bbBBBBBBb,"
-"0000bbbbBBBBBBbbbbbbBBBBBBBBbbbbbbbbbBBBBBBbb," //17
-"000000bbbbBBBBBBbbbbbbbbbbbbbbbbbBBBBBBbbbbb0,"
-"00000000bbbbBBBBBBbbb0000bbbbbbBBBbbbbbbb0000,"
-"0000000000bbbbBBBBBBbbb0000bbbbbbBBBBBbbbb000,"
-"000bbbbbbbbbbbbbBBBBBBbbb000000000bbbBBBBBBbb,"
-"bbbbbbBBBBBBbbbbbbBBBBBBbbb000000bbbBBBBBBbbb,"
-"bbBBBBBbbbBBBBBBbbbbBBBBBBbbb00000bbbBBBBBBbb,"
-"bbBBBBBBbbbbBBBBBBbbbbBBBBBBbbb0000bbbBBBBBBb,"
-"bbbBBBBBBbbbbbBBBBBBbbbbBBBBBBbbbbbbbBBBBBBbb,"
-"0bbbBBBBBBbbbbbbbBBBBBBbbbBBBBBBbbbbBBBBBBbbb,"
-"00bbbBBBBBBbbbbbbbbbbBBBBBBBbbbbbbbBBBBBBbbb0,"
-"0000bbbBBBBBBbbb00000000000000bbbbBBBBBBbbb00,"
-"00000bbbbBBBBBBbbbb000000000bbbbBBBBBBbbbb000,"
-"0000000bbbbBBBBBBbbbb000000bbbBBBBBBbbbb00000," //30
-"000000000bbbbBBBBBBbbbb00bbbBBBBBBbbbb0000000,"
-"00000000000bbbbBBBBBBbbbbbBBBBBBbbbb000000000,"
-"000000000000bbbbBBBBBBbbbBBBBBBbbbb0000000000,"
-"0000000000000bbbbBBBBBBbBBBBBBbbbb00000000000,"
-"000000000000000bbbbBBBBBBBBBbbbb0000000000000";
+static std::vector<std::string> g_pathData;
+
+bool LoadPathFile(const char* filename)
+{
+    std::ifstream file(filename);
+    if (!file.is_open())
+    {
+        MessageBoxA(nullptr, "Failed to open path file", "Load Error", MB_OK);
+        return false;
+    }
+
+    g_pathData.clear();
+    std::string line;
+    while (std::getline(file, line))
+    {
+        if (!line.empty())
+            g_pathData.push_back(line);
+    }
+
+    return true;
+}
 
 struct Tile
 {
@@ -171,8 +183,21 @@ Tile ParseTileChar(char c)
 
     case 'K': // knowledge + path
         t.isPath = true;
+        t.isBuildable = true;
         t.hasKnowledge = true;
         break;
+		// Wave range indicators (set global min/max wave for this path)
+	case 'c': g_minWave = 0; break;
+    case 'd': g_minWave = 1; break;
+    case 'e': g_minWave = 2; break;
+	case 'f': g_minWave = 3; break; 
+    case 'g': g_minWave = 4; break;
+
+    case 'C': g_maxWave = 0; break;
+    case 'D': g_maxWave = 1; break;
+    case 'E': g_maxWave = 2; break;
+    case 'F': g_maxWave = 3; break;
+    case 'G': g_maxWave = 4; break;
 
     default:
         MessageBoxA(nullptr, "Invalid tile character in path data", "Parse Error", MB_OK);
@@ -183,40 +208,27 @@ Tile ParseTileChar(char c)
 
 void ParsePathOverlay(Tile grid[GRID_ROWS][GRID_COLS])
 {
-    int row = 0;
-    int col = 0;
-
-    for (const char* p = g_pathData; *p; ++p)
-    {
-        if (*p == ',')
-        {
-            if (col != GRID_COLS)
-            {
-                MessageBoxA(nullptr, "Column count mismatch in path data", "Parse Error", MB_OK);
-                ExitProcess(1);
-            }
-
-            row++;
-            col = 0;
-            continue;
-        }
-
-        if (row >= GRID_ROWS || col >= GRID_COLS)
-        {
-            MessageBoxA(nullptr, "Path data exceeds grid size", "Parse Error", MB_OK);
-            ExitProcess(1);
-        }
-
-        grid[row][col] = ParseTileChar(*p);
-        col++;
-    }
-
-    if (row != GRID_ROWS - 1)
+    if (g_pathData.size() != GRID_ROWS)
     {
         MessageBoxA(nullptr, "Row count mismatch in path data", "Parse Error", MB_OK);
         ExitProcess(1);
     }
+
+    for (int row = 0; row < GRID_ROWS; ++row)
+    {
+        const std::string& line = g_pathData[row];
+
+        if (line.length() != GRID_COLS + 1 || line.back() != ',')
+        {
+            MessageBoxA(nullptr, "Invalid line format in path data", "Parse Error", MB_OK);
+            ExitProcess(1);
+        }
+
+        for (int col = 0; col < GRID_COLS; ++col)
+            grid[row][col] = ParseTileChar(line[col]);
+    }
 }
+
 void BuildNeighbors()
 {
     const int dxs[4] = { 1, 0, -1, 0 };
@@ -325,7 +337,7 @@ void DrawPathOverlay(Graphics& gfx, const Tile grid[GRID_ROWS][GRID_COLS], int c
                 cellSize,
                 cellSize);
 
-            if (t.hasKnowledge) {
+            if (t.hasKnowledge && g_Kcount > 0) {
                 SolidBrush brush(Color(255, 200, 0, 200));//purple
                 gfx.FillRectangle(&brush, r);
             }
@@ -348,8 +360,6 @@ struct Knowledge
 };
 struct WorldKnowledge
 {
-    int tileX = 0;
-    int tileY = 0;
     int type = 0;   // knowledge line (0..Ktype-1)
     int tier = 0;   // tier (1..Ktier-1)
     bool acquired = false;
@@ -366,18 +376,17 @@ size_t idx(int type, int tier) //column centric indexing
 }
 void InitKnowledge()
 {
-    g_acqKnow.clear();
-    g_knowledge.clear();
-
-    // Prepare 2D grid
-    g_knowledge.resize(Ktype);
+	g_acqKnow.clear();//flat vector
+	g_knowledge.clear(); //2d vector
 
     // Reserve flat vector capacity to avoid reallocations
     g_acqKnow.resize(Ktype * Ktier);
 
+    // Prepare 2D grid
+    g_knowledge.resize(Ktype);
     for (int line = 0; line < Ktype; ++line)
     {
-        g_knowledge[line].resize(Ktier);
+        g_knowledge[line].resize(Ktier);  //2d vector
         for (int tier = 0; tier < Ktier; ++tier)
         {
             // Tier 0 = base tower, always unlocked
@@ -391,29 +400,12 @@ void InitKnowledge()
                 g_knowledge[line][tier].unlocked = false;
                 g_knowledge[line][tier].Active = false;
             }
+
             // Append to flat acquired-knowledge vector in the same order
             g_acqKnow[idx(line, tier)] = g_knowledge[line][tier];
         }
     }
-}
-void AssignWorldKnowledge()
-{
     g_worldKnowledge.clear();
-    std::vector<std::pair<int, int>> sockets;
-    // Collect all knowledge-capable tiles
-    for (int y = 0; y < GRID_ROWS; ++y)
-    {
-        for (int x = 0; x < GRID_COLS; ++x)
-        {
-            if (g_pathGrid[y][x].hasKnowledge)
-            {
-                sockets.push_back({ x, y });
-            }
-        }
-    }
-    // Shuffle sockets for randomness
-    std::shuffle(sockets.begin(), sockets.end(), std::mt19937(g_rngSeed));
-    // Build a pool of available knowledge (exclude tier 0)
     std::vector<std::pair<int, int>> pool;
     for (int type = 0; type < (int)Ktype; ++type)
     {
@@ -423,18 +415,15 @@ void AssignWorldKnowledge()
         }
     }
     std::shuffle(pool.begin(), pool.end(), std::mt19937(g_rngSeed + 1));
-    int count = std::min(sockets.size(), pool.size());
-    for (int i = 0; i < count; ++i)
+    for (int i = 0; i < 9; ++i)
     {
         WorldKnowledge wk;
-        wk.tileX = sockets[i].first;
-        wk.tileY = sockets[i].second;
         wk.type = pool[i].first;
         wk.tier = pool[i].second;
-
         g_worldKnowledge.push_back(wk);
     }
 }
+
 void UnlockKnowledge(int type, int tier) {
     if (!g_knowledge[type][tier].unlocked) {
         g_knowledge[type][tier].unlocked = true;
@@ -442,7 +431,7 @@ void UnlockKnowledge(int type, int tier) {
     }
 }
 void ActivateKnowledge(int type, int tier) {
-    if (tier > 1 && tier < 4) {
+    if (tier >= 1 && tier < 4) {
         switch (tier)
         {
         case 1:
@@ -465,6 +454,21 @@ void ActivateKnowledge(int type, int tier) {
         }
     }
 }
+bool AcquireNextWorldKnowledge()
+{
+    for (auto& wk : g_worldKnowledge)
+    {
+        if (!wk.acquired)
+        {
+            UnlockKnowledge(wk.type, wk.tier);
+            ActivateKnowledge(wk.type, wk.tier);
+            wk.acquired = true;
+            g_Kcount--;
+            return true;
+        }
+    }
+    return false; // nothing left
+}
 
 // ------------------------------------------------------------
 // Enemy
@@ -482,8 +486,8 @@ struct Enemy
     float maxDmg;       // max damage
     float displaySize;     // radius for rendering
     Gdiplus::Color color;        // color for rendering
-    int HP;               // health points
-    int mHP;              // max health points
+    int HP = 0;               // health points
+    int mHP = 0;              // max health points
     int commitsLeft = 0;    // steps left in committed direction
     int committedDir = -1;  // committed direction index
 };
@@ -682,12 +686,18 @@ void SpawnEnemy(int count = 1, int level = 0) // level 0-4
         // Tiered stats per level
         switch (level)
         {
-        case 0: e.speed = 30; e.emissionRadius = 30; e.maxDmg = 3; e.displaySize = 6; e.color = Color(255, 200, 200, 200); e.HP = 10; break;
-        case 1: e.speed = 15; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8; e.color = Color(255, 0, 255, 0); e.HP = 20; break;
-        case 2: e.speed = 25; e.emissionRadius = 50; e.maxDmg = 5; e.displaySize = 10; e.color = Color(255, 100, 100, 200); e.HP = 30; break;
-        case 3: e.speed = 20; e.emissionRadius = 40; e.maxDmg = 6; e.displaySize = 12; e.color = Color(255, 255, 0, 0); e.HP = 40; break;
-        case 4: e.speed = 10; e.emissionRadius = 60; e.maxDmg = 10; e.displaySize = 16; e.color = Color(255, 255, 0, 255); e.HP = 50; break;
-        default: e.speed = 10; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8; e.color = Color(255, 0, 255, 0); e.HP = 10; break;
+        case 0: e.speed = 30; e.emissionRadius = 30; e.maxDmg = 3; e.displaySize = 6;
+            e.color = Color(255, 200, 200, 200); e.HP = 10; break;
+        case 1: e.speed = 15; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8;
+            e.color = Color(255, 0, 255, 0); e.HP = 20; break;
+        case 2: e.speed = 25; e.emissionRadius = 50; e.maxDmg = 5; e.displaySize = 10;
+            e.color = Color(255, 100, 100, 200); e.HP = 30; break;
+        case 3: e.speed = 20; e.emissionRadius = 40; e.maxDmg = 6; e.displaySize = 12;
+            e.color = Color(255, 255, 0, 0); e.HP = 40; break;
+        case 4: e.speed = 10; e.emissionRadius = 60; e.maxDmg = 10; e.displaySize = 16;
+            e.color = Color(255, 255, 0, 255); e.HP = 50; break;
+        default: e.speed = 10; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8;
+            e.color = Color(255, 0, 255, 0); e.HP = 10; break;
         }
         e.mHP = e.HP;
 
@@ -776,10 +786,10 @@ void DrawContamination(HDC hdc)
 
     for (const auto& e : g_enemies)
     {
-        // Calculate alpha (clamp to 255)
+        // Calculate alpha (clamp to 128)
         float hpFraction = float(e.HP) / float(e.mHP);
         int alpha = int(100 * hpFraction);
-        if (alpha > 255) alpha = 255;
+        if (alpha > 128) alpha = 128;
 
         // Semi-transparent greenish contamination
         Color c(alpha, 0, 255, 0);
@@ -810,6 +820,108 @@ void DrawEnemies(HDC hdc)
             e.displaySize * 2
         );
     }
+}
+//-------------------------------------------------------------
+// Wave System
+//-------------------------------------------------------------
+struct Wave
+{
+	float startTime; // time when wave starts
+    int enemyCount;
+    int enemyLevel; // 0-4
+    float spawnInterval; // seconds between spawns
+};
+std::vector<Wave>           g_wave;
+std::vector<int>            g_spawnedCount;
+std::vector<float>          g_nextSpawnTime;
+
+void StartWave(const std::vector<Wave>& instructions)
+{
+    g_wave = instructions;
+
+    g_spawnedCount.clear();
+    g_nextSpawnTime.clear();
+
+    for (size_t i = 0; i < instructions.size(); ++i)
+    {
+        g_spawnedCount.push_back(0);
+        g_nextSpawnTime.push_back(instructions[i].startTime);
+    }
+
+    g_waveTime = 0.0f;
+    g_waveActive = true;
+}
+void ThisWave(int waveNumber)
+{
+    std::vector<Wave> wave;
+
+    switch (waveNumber)
+    {
+	case 0:  //(c)Starttime, enemy count, enemy level, spawn interval
+        wave = {
+            { 1.5f, 5, 0, 1.5f }
+        };
+        break;
+    case 1: //(d)
+        wave = {
+            { 0.0f, 5, 0, 1.0f },
+            { 3.0f, 3, 1, 0.5f }
+        };
+        break;
+    case 2: //(e)
+        wave = {
+            { 0.0f, 8, 0, 0.8f },
+            { 2.0f, 4, 1, 0.6f },
+            { 4.0f, 2, 2, 0.0f } // burst
+        };
+        break;
+    case 3:  //(f)
+        wave = {
+            { 0.0f, 10, 0, 0.6f },
+            { 3.0f, 6, 1, 1.0f },
+            { 6.0f, 1, 3, 0.0f } // mini-boss
+        };
+        break;
+	case 4:  //(g)
+        wave = {
+            { 2.0f, 3, 1, 1.5f },
+            { 5.0f, 1, 4, 0.0f } // boss
+        };
+		break;
+    }
+    if (!wave.empty())
+        StartWave(wave);
+}
+
+void UpdateWave(float deltaTime)
+{
+    if (!g_waveActive) return;
+
+    g_waveTime += deltaTime;
+
+    bool allDone = true;
+
+    for (size_t i = 0; i < g_wave.size(); ++i)
+    {
+        Wave& instr = g_wave[i];
+
+        if (g_spawnedCount[i] >= instr.enemyCount) continue;
+
+        allDone = false;
+
+        // spawn enemies if it's time
+        while (g_waveTime >= g_nextSpawnTime[i] && g_spawnedCount[i] < instr.enemyCount)
+        {
+            SpawnEnemy(1, instr.enemyLevel);
+
+            g_spawnedCount[i]++;
+            g_nextSpawnTime[i] += instr.spawnInterval;
+
+            if (instr.spawnInterval <= 0.0f) break; // burst
+        }
+    }
+
+    if (allDone) g_waveActive = false;
 }
 
 //-------------------------------------------------------------
@@ -1121,25 +1233,30 @@ void CheckKnowledgeUnlock()
 {
     for (const auto& tower : g_towers)
     {
-        if (tower.type != 0 || !tower.operational) // only siphon towers
+        if (tower.type != 0 || !tower.operational)
             continue;
 
         float r2 = tower.InfRadius * tower.InfRadius;
 
-        for (auto& wk : g_worldKnowledge)
+        for (int y = 0; y < GRID_ROWS; ++y)
         {
-            if (wk.acquired) continue;  // already unlocked
-
-            float dx = TileCenterX(wk.tileX) - tower.x;
-            float dy = TileCenterY(wk.tileY) - tower.y;
-
-            if (dx * dx + dy * dy <= r2)
+            for (int x = 0; x < GRID_COLS; ++x)
             {
-                // Unlock knowledge and remove visual indicator
-                UnlockKnowledge(wk.type, wk.tier);
-                ActivateKnowledge(wk.type, wk.tier);
-                g_pathGrid[wk.tileY][wk.tileX].hasKnowledge = false;
-                wk.acquired = true;
+                Tile& tile = g_pathGrid[y][x];
+                if (!tile.hasKnowledge)
+                    continue;
+
+                float dx = TileCenterX(x) - tower.x;
+                float dy = TileCenterY(y) - tower.y;
+
+                if (dx * dx + dy * dy <= r2)
+                {
+                    if (AcquireNextWorldKnowledge())
+                    {
+                        tile.hasKnowledge = false; // consume trigger
+                    }
+                    return; // one unlock per tick is enough
+                }
             }
         }
     }
@@ -1446,6 +1563,14 @@ void DrawHUD(HDC hdc)
     // STATUS panel header (reserved space)
     g.DrawString(L"STATUS", -1, &smallFont,
         PointF(status.x + 10.0f, status.y + 6.0f), &text);
+
+    wchar_t pathBuffer[128];
+    swprintf_s(pathBuffer, L"Path: %S",
+        (g_pathIndex >= 0 && g_pathIndex < (int)g_pathFiles.size()) ?
+        g_pathFiles[g_pathIndex].c_str() : "N/A");
+
+    g.DrawString(pathBuffer, -1, &smallFont,
+        PointF(status.x + 10.0f, status.y + 28.0f), &text);
 }
 
 bool isBlocked(int tileX, int tileY)
@@ -1580,6 +1705,59 @@ void UpdateResourceRate(float dt)
         g_resourceTimer = 0.0f;
     }
 }
+void NextPath()
+{
+    g_pathIndex++;
+
+    // Check if we ran out of paths
+    if (g_pathIndex >= (int)g_pathFiles.size())
+    {
+        g_isOver = true;
+        MessageBoxA(nullptr, "All paths completed!", "Victory", MB_OK);
+        return;
+    }
+
+    // Load the next path file
+    if (!LoadPathFile(g_pathFiles[g_pathIndex].c_str()))
+    {
+        MessageBoxA(nullptr, "Failed to load path file", "Load Error", MB_OK);
+        g_isOver = true;
+        return;
+    }
+
+    // Rebuild all path-derived data
+	ParsePathOverlay(g_pathGrid);
+    BuildDistanceField();
+    BuildNeighbors();
+	CollectSpawnPoints();
+
+    // Reset path-scoped runtime state
+    g_enemies.clear();
+    g_bullets.clear();
+	g_towers.clear();
+    g_hoverTileX = -1;
+    g_hoverTileY = -1;
+    g_pathCompleted = false;
+
+    // reset Influence overlay
+    UpdateInfluence();
+
+    // Wave data for new path
+    // --- Spawn enemies for this path ---
+    int selectedWave = g_minWave;
+	if (g_maxWave < g_minWave)  // safety clamp in case of misconfigured path data
+        g_maxWave = g_minWave;
+
+    if (g_maxWave > g_minWave)
+    {
+        selectedWave =
+            g_minWave +
+            (rand() % (g_maxWave - g_minWave + 1));
+    }
+
+    ThisWave(selectedWave);
+
+}
 
 bool CheckWinLose()
 {
@@ -1598,11 +1776,14 @@ bool CheckWinLose()
     }
 
     // Win: no enemies left
-    if (g_enemies.empty())
+    if (!g_waveActive && g_enemies.empty() && !g_pathCompleted) //Check Wave complete
     {
-        g_isOver = true; // stop game loop actions
-        MessageBox(nullptr, L"You Win!", L"Level Completed", MB_OK);
-        return true; // game won
+		g_pathCompleted = true;
+		//reset wave state for next path
+		g_minWave = 0; // Reset Wave data to default
+		g_maxWave = 0;
+        NextPath();
+        return false; // game continues
     }
 
     return false; // game continues
@@ -1634,6 +1815,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         // --- Update game logic here ---
         UpdateEnemies(g_deltaTime);
         // Check win/lose immediately
+        UpdateWave(g_deltaTime);
         if (CheckWinLose())
         {
             // Stop the timer to freeze the game
@@ -1646,6 +1828,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         ApplyCorruptionDamage(g_deltaTime);
         CleanupDestroyedTowers();
         UpdateResourceRate(g_deltaTime);
+        //update Wave system
 
         // Request redraw
         InvalidateRect(hwnd, nullptr, FALSE);
@@ -1815,17 +1998,11 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
     QueryPerformanceFrequency(&g_qpcFreq);
     QueryPerformanceCounter(&g_lastTime);
 
-    ParsePathOverlay(g_pathGrid);
-    BuildDistanceField();
-    BuildNeighbors();
-    CollectSpawnPoints();
+    LoadPathFiles();
+	g_pathIndex = -1; // will be incremented to 0 in NextPath
+	NextPath(); // load first path and build data structures
+	// Wave data initialization would go here when implemented
     InitKnowledge();
-    AssignWorldKnowledge();
-    // Spawn an enemy for testing
-    for (int lvl = 0; lvl <= 4; ++lvl)
-    {
-        SpawnEnemy(2, 0); //lvl);
-    }
 
     // --- Back buffer init ---
     InitBackBuffer(hwnd, SCREEN_W, SCREEN_H);

@@ -5,7 +5,26 @@
       <FullPath>C:\Users\kston\source\repos\PNGbackground\x64\Debug\PNGbackground.exe</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
-  <ContentFiles />
+  <ContentFiles>
+    <ContentFile>
+      <FullPath>C:\Users\kston\source\repos\PNGbackground\x64\Debug\Path-0.txt</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\kston\source\repos\PNGbackground\x64\Debug\Path-1.txt</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\kston\source\repos\PNGbackground\x64\Debug\Path-2.txt</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\kston\source\repos\PNGbackground\x64\Debug\Path-3.txt</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\kston\source\repos\PNGbackground\x64\Debug\Path-4.txt</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\kston\source\repos\PNGbackground\x64\Debug\Path-5.txt</FullPath>
+    </ContentFile>
+  </ContentFiles>
   <SatelliteDlls />
   <NonRecipeFileRefs />
 </Project>
