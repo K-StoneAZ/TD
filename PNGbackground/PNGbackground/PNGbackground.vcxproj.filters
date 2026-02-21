@@ -48,6 +48,33 @@
     <Image Include="FantasyStraight.png">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\x64\Debug\attack0.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\attack1.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\attack2.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\barrier0.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\barrier1.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\barrier2.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\siphon0.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\siphon1.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\siphon2.png">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\x64\Debug\Path-0.txt" />
@@ -56,5 +83,12 @@
     <Text Include="..\x64\Debug\Path-3.txt" />
     <Text Include="..\x64\Debug\Path-4.txt" />
     <Text Include="..\x64\Debug\Path-5.txt" />
+    <Text Include="Path-L-0.txt" />
+    <Text Include="Path-L-1.txt" />
+    <Text Include="Path-LT-0.txt" />
+    <Text Include="Path-R-0.txt" />
+    <Text Include="Path-R-1.txt" />
+    <Text Include="Path-RT-0.txt" />
+    <Text Include="Path-X-0.txt" />
   </ItemGroup>
 </Project>
