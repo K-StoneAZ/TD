@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <random>
 #include <string>
+#include <unordered_map>
 
 
 #pragma comment(lib, "gdiplus.lib")
@@ -37,9 +38,12 @@ using namespace Gdiplus;
 static const int GAME_W = 900;
 static const int GAME_H = 700;
 static const int HUD_H = 80;
-
 static const int SCREEN_W = GAME_W;
 static const int SCREEN_H = GAME_H + HUD_H;
+//scaling
+static float g_scale = 1.0f;
+static int g_windowW = SCREEN_W;
+static int g_windowH = SCREEN_H;
 bool g_isOver = false;
 // Back buffer globals
 static HDC     g_backDC = nullptr;
@@ -54,6 +58,8 @@ static float g_deltaTime = 0.0f;
 // GDI+ globals
 ULONG_PTR g_gdiplusToken = 0;
 Image* g_background = nullptr;
+
+
 // Overlay grid
 static const int GRID_COLS = 45;
 static const int GRID_ROWS = 35;
@@ -64,16 +70,19 @@ static int g_hoverTileY = -1;
 std::vector<std::string> g_pathFiles;
 int g_pathIndex = 0;
 bool g_pathCompleted = false;
+bool RestartPath;
 // Wave globals
 float g_waveTime = 0.0f;
 bool  g_waveActive = false;
 static int g_minWave = 0; //min wave for this path
 static int g_maxWave = 0; //max wave for this path
+static int g_waves = 0; // number of waves to iterate 1-9
 
 // Random seed
 static unsigned int g_rngSeed = 0;
 // Resource Globals
 static float g_resource = 100.0f;
+static float g_resourceCap = 500.0f;
 static float g_resourcePerSecond = 0.0f;
 static float g_resourceTimer = 0.0f;
 static float g_resourceLast = 0.0f;
@@ -85,6 +94,38 @@ static int g_Kcount = 9; // Kowledge available at start of game
 static int g_TowerType = -1;
 std::vector<RectF> g_buildSlots; // Stores the rectangles
 bool isBlocked(int tileX, int tileY);
+
+static std::wstring g_assetsPath; // must be set to exe directory in WinMain
+static std::unordered_map<std::wstring, Image*> g_spriteCache;
+
+Image* GetSprite(const std::wstring& name)
+{
+    if (name.empty())
+        return nullptr;
+
+    auto it = g_spriteCache.find(name);
+    if (it != g_spriteCache.end())
+        return it->second;
+
+    std::wstring fullPath = g_assetsPath + name;
+    Image* img = Image::FromFile(fullPath.c_str());
+    if (!img || img->GetLastStatus() != Ok)
+    {
+        delete img;
+        g_spriteCache[name] = nullptr; // remember missing so we don't keep trying
+        return nullptr;
+    }
+
+    g_spriteCache[name] = img;
+    return img;
+}
+
+void CleanupSprites()
+{
+    for (auto& kv : g_spriteCache)
+        delete kv.second;
+    g_spriteCache.clear();
+}
 // ------------------------------------------------------------
 // Back Buffer Initialization
 // ------------------------------------------------------------
@@ -112,8 +153,50 @@ void LoadPathFiles()
         g_pathFiles.push_back("Path-3.txt");
         g_pathFiles.push_back("Path-4.txt");
         g_pathFiles.push_back("Path-5.txt");
+        g_pathFiles.push_back("Path-6.txt");
+        g_pathFiles.push_back("Path-7.txt");
+        g_pathFiles.push_back("Path-L-0.txt");
+        g_pathFiles.push_back("Path-L-1.txt");
+        g_pathFiles.push_back("Path-L-2.txt");
+        g_pathFiles.push_back("Path-L-3.txt");
 
+        g_pathFiles.push_back("Path-LR-0.txt");
+        g_pathFiles.push_back("Path-LR-1.txt");
+        g_pathFiles.push_back("Path-LR-2.txt");
+        g_pathFiles.push_back("Path-LR-3.txt");
+        g_pathFiles.push_back("Path-LR-4.txt");
+        g_pathFiles.push_back("Path-LT-0.txt");
+        g_pathFiles.push_back("Path-LT-1.txt");
+        g_pathFiles.push_back("Path-LT-2.txt");
+        g_pathFiles.push_back("Path-LT-3.txt");
+        g_pathFiles.push_back("Path-RT-0.txt");
+        g_pathFiles.push_back("Path-RT-1.txt");
+        g_pathFiles.push_back("Path-RT-2.txt");
+        g_pathFiles.push_back("Path-RT-3.txt");
+        
+        g_pathFiles.push_back("Path-R-0.txt");
+        g_pathFiles.push_back("Path-R-1.txt");
+        g_pathFiles.push_back("Path-R-2.txt");
+        g_pathFiles.push_back("Path-R-3.txt");
+        g_pathFiles.push_back("Path-X-0.txt");
+        g_pathFiles.push_back("Path-X-1.txt");
+        g_pathFiles.push_back("Path-X-2.txt");
+        g_pathFiles.push_back("Path-X-3.txt");
+        g_pathFiles.push_back("Path-X-4.txt");
+        g_pathFiles.push_back("Path-X-5.txt");
+        g_pathFiles.push_back("Path-X-6.txt");
+        g_pathFiles.push_back("Path-X-7.txt");
+        
 		g_pathIndex = 0;
+}
+void ShufflePaths()
+{
+    for (int i = (int)g_pathFiles.size() - 1; i > 0; --i)
+    {
+        int j = rand() % (i + 1);
+
+        std::swap(g_pathFiles[i], g_pathFiles[j]);
+    }
 }
 
 // ------------------------------------------------------------
@@ -154,14 +237,14 @@ struct Tile
 };
 static Tile g_pathGrid[GRID_ROWS][GRID_COLS];
 
-Tile ParseTileChar(char c)
+Tile ParseTileChar(char c) //Path and Wave data encoding:
 {
     Tile t{};
 
     switch (c)
     {
     case '0': // empty
-        break;
+		break;
 
     case 'p': // path only
         t.isPath = true;
@@ -198,6 +281,16 @@ Tile ParseTileChar(char c)
     case 'E': g_maxWave = 2; break;
     case 'F': g_maxWave = 3; break;
     case 'G': g_maxWave = 4; break;
+
+	case '1': g_waves = 1; break;
+	case '2': g_waves = 2; break;
+	case '3': g_waves = 3; break;
+	case '4': g_waves = 4; break;
+	case '5': g_waves = 5; break;
+	case '6': g_waves = 6; break;
+	case '7': g_waves = 7; break;
+	case '8': g_waves = 8; break;
+	case '9': g_waves = 9; break;
 
     default:
         MessageBoxA(nullptr, "Invalid tile character in path data", "Parse Error", MB_OK);
@@ -365,8 +458,7 @@ struct WorldKnowledge
     bool acquired = false;
 };
 
-std::vector<std::vector < Knowledge>> g_knowledge;
-std::vector<Knowledge> g_acqKnow;  // Acquired knowledge
+std::vector < Knowledge> g_knowledge;
 std::vector<WorldKnowledge> g_worldKnowledge;// Dynamic knowledge
 
 size_t idx(int type, int tier) //column centric indexing
@@ -376,35 +468,31 @@ size_t idx(int type, int tier) //column centric indexing
 }
 void InitKnowledge()
 {
-	g_acqKnow.clear();//flat vector
-	g_knowledge.clear(); //2d vector
+
+	g_knowledge.clear();
 
     // Reserve flat vector capacity to avoid reallocations
-    g_acqKnow.resize(Ktype * Ktier);
+    g_knowledge.resize(Ktype * Ktier);
 
-    // Prepare 2D grid
-    g_knowledge.resize(Ktype);
-    for (int line = 0; line < Ktype; ++line)
+    for (int type = 0; type < Ktype; ++type)
     {
-        g_knowledge[line].resize(Ktier);  //2d vector
         for (int tier = 0; tier < Ktier; ++tier)
         {
-            // Tier 0 = base tower, always unlocked
+            Knowledge& k = g_knowledge[idx(type, tier)];
+
             if (tier == 0)
             {
-                g_knowledge[line][tier].unlocked = true;
-                g_knowledge[line][tier].Active = true;
+                k.unlocked = true;
+                k.Active = true;
             }
             else
             {
-                g_knowledge[line][tier].unlocked = false;
-                g_knowledge[line][tier].Active = false;
+                k.unlocked = false;
+                k.Active = false;
             }
-
-            // Append to flat acquired-knowledge vector in the same order
-            g_acqKnow[idx(line, tier)] = g_knowledge[line][tier];
         }
     }
+	//shuffle available knowledge for this run
     g_worldKnowledge.clear();
     std::vector<std::pair<int, int>> pool;
     for (int type = 0; type < (int)Ktype; ++type)
@@ -415,43 +503,23 @@ void InitKnowledge()
         }
     }
     std::shuffle(pool.begin(), pool.end(), std::mt19937(g_rngSeed + 1));
-    for (int i = 0; i < 9; ++i)
+    for (int i = 0; i < 9 && i < (int)pool.size(); ++i)
     {
-        WorldKnowledge wk;
-        wk.type = pool[i].first;
-        wk.tier = pool[i].second;
-        g_worldKnowledge.push_back(wk);
+        g_worldKnowledge.push_back({ pool[i].first, pool[i].second, false });
     }
 }
 
-void UnlockKnowledge(int type, int tier) {
-    if (!g_knowledge[type][tier].unlocked) {
-        g_knowledge[type][tier].unlocked = true;
-        g_acqKnow[idx(type, tier)] = g_knowledge[type][tier];
-    }
-}
-void ActivateKnowledge(int type, int tier) {
-    if (tier >= 1 && tier < 4) {
-        switch (tier)
-        {
-        case 1:
-            g_knowledge[type][tier].Active = true;
-            g_acqKnow[idx(type, tier)].Active = g_knowledge[type][tier].Active;
-            break;
-        case 2:
-            if (g_knowledge[type][1].unlocked)
-            {
-                g_knowledge[type][tier].Active = true;
-                g_acqKnow[idx(type, tier)].Active = g_knowledge[type][tier].Active;
-            }
-            break;
-        case 3:
-            if (g_knowledge[type][2].unlocked && g_knowledge[type][1].unlocked)
-            {
-                g_knowledge[type][tier].Active = true;
-                g_acqKnow[idx(type, tier)].Active = g_knowledge[type][tier].Active;
-            }
-        }
+void ActivateKnowledge(int type, int tier)
+{
+    // Unlock first
+    g_knowledge[idx(type, tier)].unlocked = true;
+
+    // Recompute activation for this entire type line
+    for (int t = 1; t < Ktier; ++t)
+    {
+        Knowledge& current = g_knowledge[idx(type, t)];
+        Knowledge& prev = g_knowledge[idx(type, t - 1)];
+        current.Active = (current.unlocked && prev.Active);
     }
 }
 bool AcquireNextWorldKnowledge()
@@ -460,7 +528,6 @@ bool AcquireNextWorldKnowledge()
     {
         if (!wk.acquired)
         {
-            UnlockKnowledge(wk.type, wk.tier);
             ActivateKnowledge(wk.type, wk.tier);
             wk.acquired = true;
             g_Kcount--;
@@ -500,14 +567,10 @@ struct SpawnPoint
 
 std::vector<Enemy> g_enemies;
 std::vector<SpawnPoint> g_topSpawns;
-std::vector<SpawnPoint> g_leftSpawns;
-std::vector<SpawnPoint> g_rightSpawns;
 
 void CollectSpawnPoints()
 {
     g_topSpawns.clear();
-    g_leftSpawns.clear();
-    g_rightSpawns.clear();
 
     for (int y = 0; y < GRID_ROWS; ++y)
     {
@@ -525,13 +588,13 @@ void CollectSpawnPoints()
             // Left edge (secondary)
             if (x == 0)
             {
-                g_leftSpawns.push_back({ x, y });
+                g_topSpawns.push_back({ x, y });
             }
 
             // Right edge (secondary)
             if (x == GRID_COLS - 1)
             {
-                g_rightSpawns.push_back({ x, y });
+                g_topSpawns.push_back({ x, y });
             }
         }
     }
@@ -539,17 +602,13 @@ void CollectSpawnPoints()
 
 SpawnPoint GetRandomSpawn()
 {
-    if (!g_topSpawns.empty())
+    if (!g_topSpawns.empty()) {
         return g_topSpawns[rand() % g_topSpawns.size()];
-
-    if (!g_leftSpawns.empty())
-        return g_leftSpawns[rand() % g_leftSpawns.size()];
-
-    if (!g_rightSpawns.empty())
-        return g_rightSpawns[rand() % g_rightSpawns.size()];
-
-    MessageBoxA(nullptr, "No valid spawn points", "Spawn Error", MB_OK);
-    ExitProcess(1);
+    }
+    else {
+        MessageBoxA(nullptr, "No valid spawn points", "Spawn Error", MB_OK);
+        ExitProcess(1);
+    }
 }
 bool FindNextPathTile(
     int x, int y,
@@ -687,17 +746,15 @@ void SpawnEnemy(int count = 1, int level = 0) // level 0-4
         switch (level)
         {
         case 0: e.speed = 30; e.emissionRadius = 30; e.maxDmg = 3; e.displaySize = 6;
-            e.color = Color(255, 200, 200, 200); e.HP = 10; break;
-        case 1: e.speed = 15; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8;
-            e.color = Color(255, 0, 255, 0); e.HP = 20; break;
+			e.color = Color(255, 200, 200, 200); e.HP = 10; break;//white
+        case 1: e.speed = 18; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8;
+			e.color = Color(255, 100, 255, 100); e.HP = 20; break;//green
         case 2: e.speed = 25; e.emissionRadius = 50; e.maxDmg = 5; e.displaySize = 10;
-            e.color = Color(255, 100, 100, 200); e.HP = 30; break;
+			e.color = Color(255, 100, 100, 200); e.HP = 30; break;//blue
         case 3: e.speed = 20; e.emissionRadius = 40; e.maxDmg = 6; e.displaySize = 12;
-            e.color = Color(255, 255, 0, 0); e.HP = 40; break;
-        case 4: e.speed = 10; e.emissionRadius = 60; e.maxDmg = 10; e.displaySize = 16;
-            e.color = Color(255, 255, 0, 255); e.HP = 50; break;
-        default: e.speed = 10; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8;
-            e.color = Color(255, 0, 255, 0); e.HP = 10; break;
+            e.color = Color(255, 255, 0, 0); e.HP = 40; break;//red
+        case 4: e.speed = 19; e.emissionRadius = 60; e.maxDmg = 10; e.displaySize = 16;
+			e.color = Color(255, 255, 0, 255); e.HP = 50; break;//magenta
         }
         e.mHP = e.HP;
 
@@ -851,7 +908,7 @@ void StartWave(const std::vector<Wave>& instructions)
     g_waveTime = 0.0f;
     g_waveActive = true;
 }
-void ThisWave(int waveNumber)
+void ThisWave(int waveNumber)//wave definitions (c-g for wave range, 1-9 for repeats)
 {
     std::vector<Wave> wave;
 
@@ -859,33 +916,33 @@ void ThisWave(int waveNumber)
     {
 	case 0:  //(c)Starttime, enemy count, enemy level, spawn interval
         wave = {
-            { 1.5f, 5, 0, 1.5f }
+            { 1.5f, 5, 0, 1.5f }// Basic
         };
         break;
     case 1: //(d)
         wave = {
-            { 0.0f, 5, 0, 1.0f },
+            { 1.5f, 5, 0, 1.0f },
             { 3.0f, 3, 1, 0.5f }
         };
         break;
     case 2: //(e)
         wave = {
-            { 0.0f, 8, 0, 0.8f },
+            { 0.0f, 8, 0, 0.0f },
             { 2.0f, 4, 1, 0.6f },
-            { 4.0f, 2, 2, 0.0f } // burst
+            { 4.0f, 2, 2, 1.5f } // burst
         };
         break;
     case 3:  //(f)
         wave = {
-            { 0.0f, 10, 0, 0.6f },
+            { 1.5f, 10, 0, 0.6f },
             { 3.0f, 6, 1, 1.0f },
-            { 6.0f, 1, 3, 0.0f } // mini-boss
+            { 6.0f, 2, 3, 6.0f } // mini-boss
         };
         break;
 	case 4:  //(g)
         wave = {
             { 2.0f, 3, 1, 1.5f },
-            { 5.0f, 1, 4, 0.0f } // boss
+            { 5.0f, 2, 4, 5.0f } // boss
         };
 		break;
     }
@@ -895,12 +952,19 @@ void ThisWave(int waveNumber)
 
 void UpdateWave(float deltaTime)
 {
+
     if (!g_waveActive) return;
 
     g_waveTime += deltaTime;
 
-    bool allDone = true;
+	static int waveCount = g_waves; // number of waves to iterate through (1-9)
+    if (waveCount == 0)
+    {
+        waveCount = std::max(1, g_waves); // ensure at least one repetition
+    }
 
+    bool allDone = true;
+    
     for (size_t i = 0; i < g_wave.size(); ++i)
     {
         Wave& instr = g_wave[i];
@@ -919,9 +983,28 @@ void UpdateWave(float deltaTime)
 
             if (instr.spawnInterval <= 0.0f) break; // burst
         }
+	}
+    if (allDone)
+    {
+        waveCount--;
+        if (waveCount > 0)
+        {   // Prepare next repetition: reset per-instruction counters and schedule times
+            for (size_t i = 0; i < g_wave.size(); ++i)
+            {
+                g_spawnedCount[i] = 0;
+                g_nextSpawnTime[i] = g_wave[i].startTime;
+            }
+            // Reset wave time to begin the next repetition cleanly
+            g_waveTime = 0.0f;
+            // Keep g_waveActive == true to continue spawning next repetition
+        }
+        else
+        {
+            // No repetitions left: deactivate wave system and reset repeatsLeft
+            g_waveActive = false;
+            waveCount = 0;
+        }
     }
-
-    if (allDone) g_waveActive = false;
 }
 
 //-------------------------------------------------------------
@@ -948,6 +1031,7 @@ struct Tower
     float ammoPerAttack; // units consumed per attack
     bool operational = false; // fully built and functional
     Gdiplus::Color color;  // visual color
+	std::wstring spriteName;        // tower name for UI
     int HP;               // health points
     int maxHP;            // max health points
 };
@@ -969,61 +1053,87 @@ std::vector<Bullet> g_bullets;
 
 void InitializeTower(Tower& t)
 {
+    // reset per-instance runtime state
     t.level = 0;
-    t.costPaid = 0.0f; // start building from zero
-    t.ammo = 0.0f;     // no ammo initially
+    t.costPaid = 0.0f;
+    t.ammo = 0.0f;
 
-    switch (t.type)
+    // Data-driven definitions matching previous switch cases (index == original case value)
+    struct TowerDef
     {
-        // Siphon Tower
-    case 0:
-        t.range = 100.f;
-        t.InfRadius = 80.f;
-        t.attackPower = 0.f;  // resource per attack
-        t.HP = 80;
-        t.maxHP = t.HP;
-        t.costTotal = 10.0f;     // total units required to build
-        t.maxAmmo = 0.0f;        // no ammo capacity
-        t.ammoPerAttack = 0.05f;  // units consumed/gain per attack
-        t.color = Gdiplus::Color(255, 120, 200, 255);
-        break;
+        int resType;
+        int resLevel;
+        float range;
+        float InfRadius;
+        float attackPower;
+        float attackRate;
+        int HP;
+        float costTotal;
+        float maxAmmo;
+        float ammoPerAttack;
+        Gdiplus::Color color;
+        const wchar_t* sprite;
+    };
 
-        // Barrier Tower
-    case 1:
-        t.range = 0.f;
-        t.InfRadius = 0.f;
-        t.attackPower = 0.0f;
-        t.HP = 300;
-        t.maxHP = t.HP;
-        t.costTotal = 15.0f;
-        t.maxAmmo = 0.0f;        // no ammo capacity
-        t.ammoPerAttack = 0.0f;
-        t.color = Gdiplus::Color(255, 160, 160, 200);//
-        break;
+    static const TowerDef defs[] =
+    {
+        // T,L, rng, InfRad, attPow, attR, HP,  cost, maxAmmo, aPerAt, Color,                         sprite
+        { 0, 0, 100.f,  80.f,  0.f,  0.f,  80,  10.0f,  0.0f,   0.05f, Gdiplus::Color(255,120,200,255), L"siphon0.png" }, // case 0
+        { 1, 0,   0.f,   0.f,  0.f,  0.f, 300,  15.0f,  0.0f,   0.0f,  Gdiplus::Color(255,160,160,200), L"barrier0.png" }, // case 1
+        { 2, 0,  80.f,   0.f, 1.5f,  1.f, 120,  20.0f,  4.0f,  1.50f,  Gdiplus::Color(255,255,80,80),   L"attack0.png"   }, // case 2
+        { 0, 1, 120.f, 120.f,  0.f,  0.f, 120,  20.0f,  0.0f,   0.25f, Gdiplus::Color(255,100,200,255), L"siphon1.png"   }, // case 3
+        { 1, 1,   0.f,   0.f,  0.f,  0.f, 500,  30.0f,  0.0f,   0.0f,  Gdiplus::Color(255,160,140,220), L"barrier1.png"  }, // case 4
+        { 2, 1, 120.f,   0.f,  2.f,  4.f, 150,  30.0f,  6.0f,   2.0f,  Gdiplus::Color(255,255,80,100),  L"attack1.png"   }, // case 5
+        { 0, 2, 180.f, 180.f,  0.f,  0.f, 120,  30.0f,  0.0f,   0.5f,  Gdiplus::Color(255,80,200,255),  L"siphon2.png"   }, // case 6
+        { 1, 2,   0.f,   0.f,  0.f,  0.f, 900,  40.0f,  0.0f,   0.0f,  Gdiplus::Color(255,160,140,220), L"barrier2.png"  }, // case 7
+        { 2, 2, 180.f,   0.f,  3.f,  8.f, 200,  50.0f, 16.0f,   3.0f,  Gdiplus::Color(255,255,80,120),  L"attack2.png"   }  // case 8
+    };
 
-        // Attack Tower
-    case 2:
-        t.range = 80.f;
-        t.InfRadius = 0.f;
-        t.attackPower = 1.f;
-        t.attackRate = 1.0f; // attacks per second
-        t.HP = 100;
-        t.maxHP = t.HP;
-        t.costTotal = 20.0f;
-        t.maxAmmo = 6.0f;        // no ammo capacity
-        t.ammoPerAttack = 1.f;
-        t.color = Gdiplus::Color(255, 255, 80, 80);
-        break;
+    const int defsCount = static_cast<int>(sizeof(defs) / sizeof(defs[0]));
+    int idx = t.type;
+    if (idx < 0 || idx >= defsCount)
+    {
+        // fallback to first definition if incoming type is invalid
+        idx = 0;
+    }
 
-    default: // fallback
-        t.range = 0.f;
-        t.InfRadius = 0.f;
-        t.attackPower = 0.f;
-        t.HP = 1;
-        t.costTotal = 1.0f;
-        t.ammoPerAttack = 1.0f;
-        t.color = Gdiplus::Color(128, 255, 255, 255);
-        break;
+    const TowerDef& d = defs[idx];
+
+    // preserve the original behavior: set t.type to base type and t.level to tier
+    t.type = d.resType;
+    t.level = d.resLevel;
+
+    // assign remaining fields
+    t.range = d.range;
+    t.InfRadius = d.InfRadius;
+    t.attackPower = d.attackPower;
+    t.attackRate = d.attackRate;
+    t.HP = d.HP;
+    t.maxHP = d.HP;
+    t.costTotal = d.costTotal;
+    t.maxAmmo = d.maxAmmo;
+    t.ammoPerAttack = d.ammoPerAttack;
+    t.color = d.color;
+    t.spriteName = d.sprite ? std::wstring(d.sprite) : std::wstring();
+}
+void UpdateInfluence()
+{
+    for (auto& t : g_towers)
+        t.inInf = false;
+
+    for (const auto& src : g_towers)
+    {
+        if (src.InfRadius <= 0) continue;
+
+        float r2 = src.InfRadius * src.InfRadius;
+
+        for (auto& t : g_towers)
+        {
+            float dx = t.x - src.x;
+            float dy = t.y - src.y;
+            if (dx * dx + dy * dy <= r2)
+                t.inInf = true;
+        }
     }
 }
 
@@ -1032,6 +1142,25 @@ bool PlaceTowerAt(int tileX, int tileY)
     // --- Check bounds ---
     if (tileX < 0 || tileX >= GRID_COLS || tileY < 0 || tileY >= GRID_ROWS)
         return false;
+
+    // If no tower is selected (g_TowerType == -1) treat click as "remove tower"
+    if (g_TowerType == -1)
+    {
+        // Find any tower at the clicked cell and remove it.
+        for (int i = (int)g_towers.size() - 1; i >= 0; --i)
+        {
+            if (g_towers[i].tileX == tileX && g_towers[i].tileY == tileY)
+            {
+                g_towers.erase(g_towers.begin() + i);
+
+                // Recompute derived state (influence overlay etc.)
+                UpdateInfluence();
+
+                return true; // removed
+            }
+        }
+        return false; // nothing to remove
+    }
 
     Tile& t = g_pathGrid[tileY][tileX];
 
@@ -1058,6 +1187,9 @@ bool PlaceTowerAt(int tileX, int tileY)
 
     g_towers.push_back(newTower);
 
+    // Recompute influence because new tower may affect others
+    UpdateInfluence();
+
     return true;
 }
 
@@ -1068,26 +1200,6 @@ bool PlaceTowerAtMouse(int mouseX, int mouseY)
     return PlaceTowerAt(tileX, tileY);
 }
 
-void UpdateInfluence()
-{
-    for (auto& t : g_towers)
-        t.inInf = false;
-
-    for (const auto& src : g_towers)
-    {
-        if (src.InfRadius <= 0) continue;
-
-        float r2 = src.InfRadius * src.InfRadius;
-
-        for (auto& t : g_towers)
-        {
-            float dx = t.x - src.x;
-            float dy = t.y - src.y;
-            if (dx * dx + dy * dy <= r2)
-                t.inInf = true;
-        }
-    }
-}
 bool IsTileInInfluence(int tileX, int tileY)
 {
     float cx = TileCenterX(tileX);
@@ -1131,6 +1243,7 @@ void DrawInfluenceOverlay(HDC hdc)
 }
 void UpdateTower(Tower& t, float dt)
 {
+	g_resource += 0.01f; // passive income
     // inside influence
     if (!t.inInf) {
         return;
@@ -1328,15 +1441,31 @@ void DrawTowers()
         SolidBrush bgBrush(Color(255, 80, 80, 80)); // grey for empty
         g.FillRectangle(&bgBrush, left, top, width, height);
 
-        // --- Draw build progress ---
-        if (tower.costPaid > 0)
+        // --- Draw build progress or sprite ---
+        if (tower.costPaid > 0 && !tower.operational)
         {
             float progress = tower.costPaid / tower.costTotal;
             REAL filledHeight = height * progress;
 
-            // Fill from bottom up
+            // Fill from bottom up while building (no sprite yet)
             SolidBrush fillBrush(tower.color);
             g.FillRectangle(&fillBrush, left, top + height - filledHeight, width, filledHeight);
+        }
+
+        if (tower.operational)
+        {
+            // Try to draw sprite, scaled to tower rectangle
+            Image* sprite = GetSprite(tower.spriteName);
+            if (sprite)
+            {
+                g.DrawImage(sprite, left, top, width, height);
+            }
+            else
+            {
+                // Fallback: colored rectangle
+                SolidBrush fillBrush(tower.color);
+                g.FillRectangle(&fillBrush, left, top, width, height);
+            }
         }
 
         // --- Optional: border ---
@@ -1421,17 +1550,26 @@ void DrawHoverHighlight(HDC hdc)
         const Tile& tile = g_pathGrid[g_hoverTileY][g_hoverTileX];
         if (!tile.isBuildable) return;
 
-        Tower proto = GetTowerPrototype(g_TowerType);
-        SolidBrush brush(proto.color);
 
         const REAL padding = 2.0f;
         REAL x = g_hoverTileX * static_cast<REAL>(CELL_SIZE) + padding;
         REAL y = g_hoverTileY * static_cast<REAL>(CELL_SIZE) + padding;
         REAL size = static_cast<REAL>(CELL_SIZE) - padding * 2;
 
+        Pen border(Color(255, 255, 255, 255), 2.0f);
+
+        if (g_TowerType < 0)
+        {
+            // No tower selected white outline only
+            g.DrawRectangle(&border, x, y, size, size);
+            return;
+        }
+
+        Tower proto = GetTowerPrototype(g_TowerType);
+        SolidBrush brush(proto.color);
+
         g.FillRectangle(&brush, x, y, size, size);
 
-        Pen border(Color(255, 255, 255, 255), 2.0f);
         g.DrawRectangle(&border, x, y, size, size);
 
         // Draw range circle
@@ -1448,6 +1586,7 @@ void DrawHoverHighlight(HDC hdc)
         Pen border(Color(255, 255, 255, 255), 4.0f);
         g.DrawRectangle(&border, r.X, r.Y, r.Width, r.Height);
     }
+
 }
 struct HudPanel {
     REAL x, y, w, h;
@@ -1502,10 +1641,10 @@ void DrawHUD(HDC hdc)
     g.DrawString(buffer, -1, &smallFont,
         PointF(economy.x + 10.0f, economy.y + 32.0f), &rateBrush);
 
-    // BUILD panel: single row of 10 fixed-size squares with equal padding
-    const int slots = std::min(10, static_cast<int>(g_acqKnow.size()));
+    // BUILD panel: single row of 9 fixed-size squares with equal padding
+    const int slots = std::min(9, static_cast<int>(g_knowledge.size()));
     const REAL slotSize = 26.0f;
-
+    
     // Uniform padding on left, right, and top
     REAL paddingX = (build.w - slots * slotSize) / (slots + 1);
     if (paddingX < 2.0f) paddingX = 2.0f; // safety clamp
@@ -1522,15 +1661,38 @@ void DrawHUD(HDC hdc)
     g_buildSlots.clear(); // clear old frame
     for (int i = 0; i < slots; ++i)
     {
-        SolidBrush& brush = g_acqKnow[i].Active ? unlockedBrush : lockedBrush;
-        g.FillRectangle(&brush, x, y, slotSize, slotSize);
+        // Determine prototype sprite for this slot index
+        Tower proto = GetTowerPrototype(i); // slot index maps to prototype id (tier*Ktype + type)
+
+        if (g_knowledge[i].unlocked && g_knowledge[i].Active)
+        {
+            // Draw sprite for active slot (fallback to color if missing)
+            Image* icon = GetSprite(proto.spriteName);
+            if (icon)
+            {
+                g.DrawImage(icon, x, y, slotSize, slotSize);
+            }
+            else
+            {
+                g.FillRectangle(&unlockedBrush, x, y, slotSize, slotSize);
+            }
+        }
+		else if (!g_knowledge[i].Active)
+        {
+            // Inactive/locked visual
+            SolidBrush& brush = lockedBrush;
+            g.FillRectangle(&brush, x, y, slotSize, slotSize);
+        }
+
+        // Slot border
         g.DrawRectangle(&slotBorder, x, y, slotSize, slotSize);
+
         // Store rectangle in vector
         g_buildSlots.emplace_back(x, y, slotSize, slotSize);
         x += slotSize + paddingX; // move to next block
     }
     // LIGHTS under build squares
-    const int lightCount = static_cast<int>(g_acqKnow.size());
+    const int lightCount = static_cast<int>(g_knowledge.size());
     const REAL lightSize = 8.0f;
     const REAL lightSpacing = 5.0f;
 
@@ -1543,12 +1705,12 @@ void DrawHUD(HDC hdc)
 
     for (int i = 0; i < lightCount; ++i)
     {
-        if (!g_acqKnow[i].unlocked)
+        if (!g_knowledge[i].unlocked)
         {
             // outlined only
             g.DrawRectangle(&lightBorder, x, lightsY, lightSize, lightSize);
         }
-        else if (g_acqKnow[i].Active)
+        else if (g_knowledge[i].Active)
         {
             g.FillRectangle(&whiteBrush, x, lightsY, lightSize, lightSize);
         }
@@ -1597,7 +1759,7 @@ void RenderStaticWorld(HWND hwnd)
     if (g_background)
     {
         Graphics g(g_backDC);
-        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        g.SetInterpolationMode(InterpolationModeNearestNeighbor);
         g.DrawImage(g_background, 0, 0, GAME_W, GAME_H);
     }
 
@@ -1619,12 +1781,13 @@ void Render(HWND hwnd)
     DrawBullets(g_backDC);
     DrawEnemies(g_backDC);
     // Copy static world to screen
-    BitBlt(
+    StretchBlt(
         hdc,
         0, 0,
-        g_backW, g_backH,
+        g_windowW, g_windowH,
         g_backDC,
         0, 0,
+        g_backW, g_backH,
         SRCCOPY
     );
 
@@ -1704,17 +1867,56 @@ void UpdateResourceRate(float dt)
         g_resourceLast = g_resource;
         g_resourceTimer = 0.0f;
     }
+    // Enforce resource bounds to prevent farming/excessive accumulation
+    if (g_resource > g_resourceCap)
+        g_resource = g_resourceCap;
+    if (g_resource < 0.0f)
+        g_resource = 0.0f;
 }
+struct PathState
+{
+    float resource;
+    int Kcount;
+    int selectedWave;
+    bool waveActive;
+    std::vector<Knowledge> PSknowledge;
+    std::vector<WorldKnowledge> PSworldKnowledge;
+    int PSpathidx;
+
+    // Any other path-specific state
+};
+PathState g_pathState;
+
 void NextPath()
 {
-    g_pathIndex++;
-
-    // Check if we ran out of paths
-    if (g_pathIndex >= (int)g_pathFiles.size())
+    int selectedWave = g_minWave;
+    // --------------------------------
+    // RESTART PATH
+    // --------------------------------
+	bool isRestart = RestartPath; // capture flag state at start of function
+    if (isRestart)
     {
-        g_isOver = true;
-        MessageBoxA(nullptr, "All paths completed!", "Victory", MB_OK);
-        return;
+        RestartPath = false;
+        // Restore snapshot state
+        g_resource = g_pathState.resource;
+        g_Kcount = g_pathState.Kcount;
+        selectedWave = g_pathState.selectedWave;
+        g_waveActive = g_pathState.waveActive;
+        g_knowledge = g_pathState.PSknowledge;
+        g_worldKnowledge = g_pathState.PSworldKnowledge;
+        g_pathIndex = g_pathState.PSpathidx;
+        QueryPerformanceCounter(&g_lastTime);
+    }
+    else
+    {
+        // Normal progression
+        g_pathIndex++;
+        if (g_pathIndex >= (int)g_pathFiles.size())
+        {
+            g_isOver = true;
+            MessageBoxA(nullptr, "All paths completed!", "Victory", MB_OK);
+            return;
+        }
     }
 
     // Load the next path file
@@ -1724,13 +1926,11 @@ void NextPath()
         g_isOver = true;
         return;
     }
-
     // Rebuild all path-derived data
 	ParsePathOverlay(g_pathGrid);
     BuildDistanceField();
     BuildNeighbors();
 	CollectSpawnPoints();
-
     // Reset path-scoped runtime state
     g_enemies.clear();
     g_bullets.clear();
@@ -1738,28 +1938,36 @@ void NextPath()
     g_hoverTileX = -1;
     g_hoverTileY = -1;
     g_pathCompleted = false;
-
     // reset Influence overlay
     UpdateInfluence();
-
     // Wave data for new path
-    // --- Spawn enemies for this path ---
-    int selectedWave = g_minWave;
-	if (g_maxWave < g_minWave)  // safety clamp in case of misconfigured path data
-        g_maxWave = g_minWave;
-
-    if (g_maxWave > g_minWave)
+    if (!isRestart)
     {
-        selectedWave =
-            g_minWave +
-            (rand() % (g_maxWave - g_minWave + 1));
+        if (g_maxWave < g_minWave)
+            g_maxWave = g_minWave;
+
+        if (g_maxWave > g_minWave)
+        {
+            selectedWave =
+                g_minWave + (rand() % (g_maxWave - g_minWave + 1));
+        }
     }
-
     ThisWave(selectedWave);
-
+// -----------------------------
+// Capture snapshot for restart
+// -----------------------------
+    if (!isRestart) {
+        g_pathState.resource = g_resource;
+        g_pathState.Kcount = g_Kcount;
+        g_pathState.selectedWave = selectedWave;
+        g_pathState.waveActive = g_waveActive;
+        g_pathState.PSknowledge = g_knowledge;
+        g_pathState.PSworldKnowledge = g_worldKnowledge;
+        g_pathState.PSpathidx = g_pathIndex;
+    }
 }
 
-bool CheckWinLose()
+bool CheckWinLose(HWND hwnd)
 {
     if (g_isOver) return true;
     // Lose: any enemy reached the bottom
@@ -1768,10 +1976,26 @@ bool CheckWinLose()
     for (auto& enemy : g_enemies)
     {
         if (enemy.y >= exitY)
-        {
-            g_isOver = true; // stop game loop actions
-            MessageBox(nullptr, L"You Lose!", L"Level Failed", MB_OK);
-            return true; // game over
+		{  //Rework this section for bool RestartPath instead of game over
+           // Pause game updates
+            KillTimer(hwnd, 1);
+            int result = MessageBox(
+                nullptr,
+                L"You Lose!\nRestart Level?",
+                L"Level Failed",
+                MB_YESNO | MB_ICONQUESTION
+            );
+
+            if (result == IDYES)
+            {
+                RestartPath = true;
+				g_isOver = false; // allow game loop to continue for restart
+				NextPath(); // restart current path
+                QueryPerformanceCounter(&g_lastTime); // reset timer delta
+                SetTimer(hwnd, 1, 16, nullptr);  //Restart Frame timer
+                return false;
+            }
+            else { return true; } // game over
         }
     }
 
@@ -1816,7 +2040,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         UpdateEnemies(g_deltaTime);
         // Check win/lose immediately
         UpdateWave(g_deltaTime);
-        if (CheckWinLose())
+        if (CheckWinLose(hwnd))
         {
             // Stop the timer to freeze the game
             KillTimer(hwnd, 1);
@@ -1839,10 +2063,26 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         if (wParam == VK_ESCAPE)
             PostQuitMessage(0);
 
-        // Tower selection
-        if (wParam == '1') g_TowerType = 0; // Siphon
-        if (wParam == '2') g_TowerType = 1; // Barrier
-        if (wParam == '3') g_TowerType = 2; // Attack
+        // numeric keys: '1'..'9' => prototype indices 0..8, '0' => none (-1)
+        if (wParam >= '1' && wParam <= '9')
+        {
+            g_TowerType = static_cast<int>(wParam - '1'); // '1' -> 0
+        }
+        else if (wParam == '0')
+        {
+            g_TowerType = -1; // none / removal
+        }
+
+        // numpad support
+        if (wParam >= VK_NUMPAD1 && wParam <= VK_NUMPAD9)
+        {
+            g_TowerType = static_cast<int>(wParam - VK_NUMPAD1); // NUMPAD1 -> 0
+        }
+        else if (wParam == VK_NUMPAD0)
+        {
+            g_TowerType = -1;
+        }
+
         if (wParam == VK_SPACE) // Pause
         {
             static bool isPaused = false;
@@ -1856,8 +2096,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_MOUSEMOVE:
     {
-        int mx = GET_X_LPARAM(lParam);
-        int my = GET_Y_LPARAM(lParam);
+        int mx = (int)(GET_X_LPARAM(lParam) / g_scale);
+        int my = (int)(GET_Y_LPARAM(lParam) / g_scale);
 
         if (my < GAME_H)
         {
@@ -1893,9 +2133,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_LBUTTONDOWN:
     {
-        int mouseX = GET_X_LPARAM(lParam);
-        int mouseY = GET_Y_LPARAM(lParam);
-        if (mouseY >= GAME_H) {
+        int mouseX = (int)(GET_X_LPARAM(lParam) / g_scale);
+        int mouseY = (int)(GET_Y_LPARAM(lParam) / g_scale);
+
+        bool clickedSlot = false;
+        if (mouseY >= GAME_H)
+        {
             // Check if click is in the build panel squares
             for (size_t i = 0; i < g_buildSlots.size(); ++i)
             {
@@ -1903,14 +2146,28 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 if (mouseX >= r.X && mouseX <= r.X + r.Width &&
                     mouseY >= r.Y && mouseY <= r.Y + r.Height)
                 {
-                    // Tower square clicked
-                    if (g_acqKnow[i].unlocked)
+                    // Tower square clicked4
+                    if (g_knowledge[i].Active)
                         g_TowerType = static_cast<int>(i); // select this tower
+                    clickedSlot = true;
                     break; // only one square can be clicked
                 }
             }
+
+            // If user clicked the HUD but not on a slot, deselect
+            if (!clickedSlot)
+                g_TowerType = -1;
         }
+
         PlaceTowerAtMouse(mouseX, mouseY);
+        return 0;
+    }
+
+    case WM_RBUTTONDOWN:
+    {
+        // Right click to unselect/deselect current tower prototype
+        g_TowerType = -1;
+        InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
 
@@ -1927,6 +2184,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 // ------------------------------------------------------------
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
 {
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     // Seed controls spawn positions and wave randomness
     g_rngSeed = (unsigned int)time(nullptr);
     srand(g_rngSeed);
@@ -1950,15 +2208,42 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
     RegisterClass(&wc);
 
     // --- Create window sized to match image ---
-    RECT r = { 0, 0, SCREEN_W, SCREEN_H };
+// --- Get monitor resolution ---
+    HMONITOR hMonitor = MonitorFromPoint({ 0,0 }, MONITOR_DEFAULTTOPRIMARY);
 
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfo(hMonitor, &mi);
+
+    int monitorW = mi.rcMonitor.right - mi.rcMonitor.left;
+    int monitorH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+    // --- Compute uniform scale ---
+    float scaleX = (float)monitorW / SCREEN_W;
+    float scaleY = (float)monitorH / SCREEN_H;
+    float scale = std::min(scaleX, scaleY);
+
+    // Optional: integer scaling for crisp pixels
+    int intScale = (int)scale;
+    if (intScale < 1) intScale = 1;
+    scale = (float)intScale;
+
+    // --- Compute scaled window size ---
+    int windowW = (int)(SCREEN_W * scale);
+    int windowH = (int)(SCREEN_H * scale);
+
+    // --- Center window ---
+    int posX = (monitorW - windowW) / 2;
+    int posY = (monitorH - windowH) / 2;
+
+    // --- Create popup window ---
     HWND hwnd = CreateWindow(
         wc.lpszClassName,
         L"",
-        WS_POPUP,   //no border/titlebar
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        r.right - r.left,
-        r.bottom - r.top,
+        WS_POPUP,
+        posX, posY,
+        windowW,
+        windowH,
         nullptr,
         nullptr,
         hInst,
@@ -1976,10 +2261,13 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
     wchar_t exePath[MAX_PATH] = { 0 };
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
     wchar_t* lastSlash = wcsrchr(exePath, L'\\');
+    
     if (lastSlash)
     {
         *(lastSlash + 1) = L'\0'; // keep trailing slash
     }
+    g_assetsPath = exePath;
+    
     wchar_t imagePath[MAX_PATH] = { 0 };
     wcsncpy_s(imagePath, exePath, _TRUNCATE);
     wcscat_s(imagePath, L"FantasyStraight.png");
@@ -1999,6 +2287,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
     QueryPerformanceCounter(&g_lastTime);
 
     LoadPathFiles();
+	ShufflePaths(); // randomize path order each run
 	g_pathIndex = -1; // will be incremented to 0 in NextPath
 	NextPath(); // load first path and build data structures
 	// Wave data initialization would go here when implemented
@@ -2028,8 +2317,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
         DeleteDC(g_backDC);
     }
     delete g_background;
+    CleanupSprites();
     Gdiplus::GdiplusShutdown(g_gdiplusToken);
 
     return 0;
 }
+
 

@@ -135,6 +135,15 @@
     <ResourceCompile Include="PNGbackground.rc" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="..\x64\Debug\attack0.png" />
+    <Image Include="..\x64\Debug\attack1.png" />
+    <Image Include="..\x64\Debug\attack2.png" />
+    <Image Include="..\x64\Debug\barrier0.png" />
+    <Image Include="..\x64\Debug\barrier1.png" />
+    <Image Include="..\x64\Debug\barrier2.png" />
+    <Image Include="..\x64\Debug\siphon0.png" />
+    <Image Include="..\x64\Debug\siphon1.png" />
+    <Image Include="..\x64\Debug\siphon2.png" />
     <Image Include="FantasyStraight.png" />
     <Image Include="PNGbackground.ico" />
     <Image Include="small.ico" />
@@ -164,6 +173,37 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
     </Text>
+    <Text Include="Path-6.txt" />
+    <Text Include="Path-7.txt" />
+    <Text Include="Path-L-0.txt" />
+    <Text Include="Path-L-1.txt" />
+    <Text Include="Path-L-2.txt" />
+    <Text Include="Path-L-3.txt" />
+    <Text Include="Path-LR-0.txt" />
+    <Text Include="Path-LR-1.txt" />
+    <Text Include="Path-LR-2.txt" />
+    <Text Include="Path-LR-3.txt" />
+    <Text Include="Path-LR-4.txt" />
+    <Text Include="Path-LT-0.txt" />
+    <Text Include="Path-LT-1.txt" />
+    <Text Include="Path-LT-2.txt" />
+    <Text Include="Path-LT-3.txt" />
+    <Text Include="Path-R-0.txt" />
+    <Text Include="Path-R-1.txt" />
+    <Text Include="Path-R-2.txt" />
+    <Text Include="Path-R-3.txt" />
+    <Text Include="Path-RT-0.txt" />
+    <Text Include="Path-RT-1.txt" />
+    <Text Include="Path-RT-2.txt" />
+    <Text Include="Path-RT-3.txt" />
+    <Text Include="Path-X-0.txt" />
+    <Text Include="Path-X-1.txt" />
+    <Text Include="Path-X-2.txt" />
+    <Text Include="Path-X-3.txt" />
+    <Text Include="Path-X-4.txt" />
+    <Text Include="Path-X-5.txt" />
+    <Text Include="Path-X-6.txt" />
+    <Text Include="Path-X-7.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
