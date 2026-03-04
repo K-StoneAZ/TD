@@ -38,9 +38,12 @@ using namespace Gdiplus;
 static const int GAME_W = 900;
 static const int GAME_H = 700;
 static const int HUD_H = 80;
-
 static const int SCREEN_W = GAME_W;
 static const int SCREEN_H = GAME_H + HUD_H;
+//scaling
+static float g_scale = 1.0f;
+static int g_windowW = SCREEN_W;
+static int g_windowH = SCREEN_H;
 bool g_isOver = false;
 // Back buffer globals
 static HDC     g_backDC = nullptr;
@@ -65,7 +68,7 @@ static int g_hoverTileX = -1;
 static int g_hoverTileY = -1;
 // Pathfinding globals
 std::vector<std::string> g_pathFiles;
-int g_pathIndex = 0;
+static int g_pathIndex = 0;
 bool g_pathCompleted = false;
 bool RestartPath;
 // Wave globals
@@ -73,13 +76,23 @@ float g_waveTime = 0.0f;
 bool  g_waveActive = false;
 static int g_minWave = 0; //min wave for this path
 static int g_maxWave = 0; //max wave for this path
-static int g_waves = 0; // number of waves to iterate 1-9
+static int g_waves = 0; // number of repeats
 
+static int g_maxWaves = 0; // max waves for this path set by g_knowledge count and g_pathIndex
+
+bool g_bWaves = false; //Between waves
+static float g_bTimer = 0.0f; //Between wave timer
+static float g_bDelay = 0.0f; //Time between waves
+static int g_bToSpawn = 0; //Enemy waves to spawn in this path
+static int g_bWaveIndex = 0; //Current wave index for this path
+float g_WaveDiff = 0.0f; //Wave difficulty multiplier (increases each wave)
 // Random seed
 static unsigned int g_rngSeed = 0;
 // Resource Globals
 static float g_resource = 100.0f;
 static float g_resourceCap = 500.0f;
+static float g_resourceGain = 0.0f;
+static float g_resourceSpent = 0.0f;
 static float g_resourcePerSecond = 0.0f;
 static float g_resourceTimer = 0.0f;
 static float g_resourceLast = 0.0f;
@@ -91,7 +104,7 @@ static int g_Kcount = 9; // Kowledge available at start of game
 static int g_TowerType = -1;
 std::vector<RectF> g_buildSlots; // Stores the rectangles
 bool isBlocked(int tileX, int tileY);
-
+bool TowerActive = false;
 static std::wstring g_assetsPath; // must be set to exe directory in WinMain
 static std::unordered_map<std::wstring, Image*> g_spriteCache;
 
@@ -144,20 +157,46 @@ void LoadPathFiles()
 {
     g_pathFiles.clear();
 
-        g_pathFiles.push_back("Path-X-0.txt");
         g_pathFiles.push_back("Path-0.txt");
         g_pathFiles.push_back("Path-1.txt");
         g_pathFiles.push_back("Path-2.txt");
         g_pathFiles.push_back("Path-3.txt");
         g_pathFiles.push_back("Path-4.txt");
         g_pathFiles.push_back("Path-5.txt");
+        g_pathFiles.push_back("Path-6.txt");
+        g_pathFiles.push_back("Path-7.txt");
         g_pathFiles.push_back("Path-L-0.txt");
         g_pathFiles.push_back("Path-L-1.txt");
+        g_pathFiles.push_back("Path-L-2.txt");
+        g_pathFiles.push_back("Path-L-3.txt");
+
+        g_pathFiles.push_back("Path-LR-0.txt");
+        g_pathFiles.push_back("Path-LR-1.txt");
+        g_pathFiles.push_back("Path-LR-2.txt");
+        g_pathFiles.push_back("Path-LR-3.txt");
+        g_pathFiles.push_back("Path-LR-4.txt");
         g_pathFiles.push_back("Path-LT-0.txt");
+        g_pathFiles.push_back("Path-LT-1.txt");
+        g_pathFiles.push_back("Path-LT-2.txt");
+        g_pathFiles.push_back("Path-LT-3.txt");
+        g_pathFiles.push_back("Path-RT-0.txt");
+        g_pathFiles.push_back("Path-RT-1.txt");
+        g_pathFiles.push_back("Path-RT-2.txt");
+        g_pathFiles.push_back("Path-RT-3.txt");
+        
         g_pathFiles.push_back("Path-R-0.txt");
         g_pathFiles.push_back("Path-R-1.txt");
-        g_pathFiles.push_back("Path-RT-0.txt");
-
+        g_pathFiles.push_back("Path-R-2.txt");
+        g_pathFiles.push_back("Path-R-3.txt");
+        g_pathFiles.push_back("Path-X-0.txt");
+        g_pathFiles.push_back("Path-X-1.txt");
+        g_pathFiles.push_back("Path-X-2.txt");
+        g_pathFiles.push_back("Path-X-3.txt");
+        g_pathFiles.push_back("Path-X-4.txt");
+        g_pathFiles.push_back("Path-X-5.txt");
+        g_pathFiles.push_back("Path-X-6.txt");
+        g_pathFiles.push_back("Path-X-7.txt");
+        
 		g_pathIndex = 0;
 }
 void ShufflePaths()
@@ -507,6 +546,16 @@ bool AcquireNextWorldKnowledge()
     }
     return false; // nothing left
 }
+int GetActiveKnowledgeCount()
+{
+    int count = 0;
+    for (const auto& k : g_knowledge)
+    {
+        if (k.Active)
+            count++;
+    }
+    return count;
+}
 
 // ------------------------------------------------------------
 // Enemy
@@ -538,14 +587,10 @@ struct SpawnPoint
 
 std::vector<Enemy> g_enemies;
 std::vector<SpawnPoint> g_topSpawns;
-std::vector<SpawnPoint> g_leftSpawns;
-std::vector<SpawnPoint> g_rightSpawns;
 
 void CollectSpawnPoints()
 {
     g_topSpawns.clear();
-    g_leftSpawns.clear();
-    g_rightSpawns.clear();
 
     for (int y = 0; y < GRID_ROWS; ++y)
     {
@@ -563,13 +608,13 @@ void CollectSpawnPoints()
             // Left edge (secondary)
             if (x == 0)
             {
-                g_leftSpawns.push_back({ x, y });
+                g_topSpawns.push_back({ x, y });
             }
 
             // Right edge (secondary)
             if (x == GRID_COLS - 1)
             {
-                g_rightSpawns.push_back({ x, y });
+                g_topSpawns.push_back({ x, y });
             }
         }
     }
@@ -577,17 +622,13 @@ void CollectSpawnPoints()
 
 SpawnPoint GetRandomSpawn()
 {
-    if (!g_topSpawns.empty())
+    if (!g_topSpawns.empty()) {
         return g_topSpawns[rand() % g_topSpawns.size()];
-
-    if (!g_leftSpawns.empty())
-        return g_leftSpawns[rand() % g_leftSpawns.size()];
-
-    if (!g_rightSpawns.empty())
-        return g_rightSpawns[rand() % g_rightSpawns.size()];
-
-    MessageBoxA(nullptr, "No valid spawn points", "Spawn Error", MB_OK);
-    ExitProcess(1);
+    }
+    else {
+        MessageBoxA(nullptr, "No valid spawn points", "Spawn Error", MB_OK);
+        ExitProcess(1);
+    }
 }
 bool FindNextPathTile(
     int x, int y,
@@ -726,16 +767,14 @@ void SpawnEnemy(int count = 1, int level = 0) // level 0-4
         {
         case 0: e.speed = 30; e.emissionRadius = 30; e.maxDmg = 3; e.displaySize = 6;
 			e.color = Color(255, 200, 200, 200); e.HP = 10; break;//white
-        case 1: e.speed = 15; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8;
+        case 1: e.speed = 18; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8;
 			e.color = Color(255, 100, 255, 100); e.HP = 20; break;//green
         case 2: e.speed = 25; e.emissionRadius = 50; e.maxDmg = 5; e.displaySize = 10;
 			e.color = Color(255, 100, 100, 200); e.HP = 30; break;//blue
         case 3: e.speed = 20; e.emissionRadius = 40; e.maxDmg = 6; e.displaySize = 12;
             e.color = Color(255, 255, 0, 0); e.HP = 40; break;//red
-        case 4: e.speed = 15; e.emissionRadius = 60; e.maxDmg = 10; e.displaySize = 16;
+        case 4: e.speed = 19; e.emissionRadius = 60; e.maxDmg = 10; e.displaySize = 16;
 			e.color = Color(255, 255, 0, 255); e.HP = 50; break;//magenta
-        default: e.speed = 10; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8;
-            e.color = Color(255, 0, 255, 0); e.HP = 10; break;
         }
         e.mHP = e.HP;
 
@@ -885,7 +924,6 @@ void StartWave(const std::vector<Wave>& instructions)
         g_spawnedCount.push_back(0);
         g_nextSpawnTime.push_back(instructions[i].startTime);
     }
-
     g_waveTime = 0.0f;
     g_waveActive = true;
 }
@@ -930,38 +968,70 @@ void ThisWave(int waveNumber)//wave definitions (c-g for wave range, 1-9 for rep
     if (!wave.empty())
         StartWave(wave);
 }
+void SelectWave()
+{
+	int w_count = GetActiveKnowledgeCount() / 3; // 0-3 based on knowledge
+	// Map knowledge count to wave range
+    if (w_count > 3 && g_pathIndex > 9) {
+        g_bToSpawn = 5; // allow hardest wave after certain progress
+    }
+    else if (w_count == 3 && g_pathIndex > 9) {
+        g_bToSpawn = 4;
+    }
+    else if (w_count == 2 && g_pathIndex > 6) {
+        g_bToSpawn = 3;
+		g_minWave = 0; g_maxWave = 3; // exclude hardest waves
+    }
+    else if (w_count == 1 && g_pathIndex > 4) {
+        g_bToSpawn = 2;
+		g_minWave = 0; g_maxWave = 1; // easier waves
+		g_waves = 2; // repeats
+    }
+    
+}
 
 void UpdateWave(float deltaTime)
 {
+    // ----------------------------------------
+    // BETWEEN-WAVE DELAY STATE
+    // ----------------------------------------
+    if (g_bWaves)
+    {
+        g_bTimer += deltaTime;
 
+		// Check if delay is over to start next wave
+        if (g_bTimer >= g_bDelay)
+        {
+			SelectWave();
+            g_bWaves = false;
+            int nextWave = g_minWave + (rand() % (g_maxWave - g_minWave + 1));
+            ThisWave(nextWave);
+        }
+
+        return; // Do not process active wave while waiting
+    }
     if (!g_waveActive) return;
 
     g_waveTime += deltaTime;
-
-	static int waveCount = g_waves; // number of waves to iterate through (1-9)
+	static int waveCount = g_waves; // number of repetitions (1-9)
     if (waveCount == 0)
     {
         waveCount = std::max(1, g_waves); // ensure at least one repetition
     }
-
     bool allDone = true;
-    
+   
     for (size_t i = 0; i < g_wave.size(); ++i)
     {
         Wave& instr = g_wave[i];
-
         if (g_spawnedCount[i] >= instr.enemyCount) continue;
 
         allDone = false;
-
         // spawn enemies if it's time
         while (g_waveTime >= g_nextSpawnTime[i] && g_spawnedCount[i] < instr.enemyCount)
         {
             SpawnEnemy(1, instr.enemyLevel);
-
             g_spawnedCount[i]++;
             g_nextSpawnTime[i] += instr.spawnInterval;
-
             if (instr.spawnInterval <= 0.0f) break; // burst
         }
 	}
@@ -984,6 +1054,16 @@ void UpdateWave(float deltaTime)
             // No repetitions left: deactivate wave system and reset repeatsLeft
             g_waveActive = false;
             waveCount = 0;
+            g_bWaveIndex++;
+
+            if (g_bWaveIndex < g_bToSpawn)
+            {
+                g_bWaves = true;
+                g_bTimer = 0.0f;
+
+                // random delay between 20–45 seconds
+                g_bDelay = 20.0f + (rand() % 26);
+            }
         }
     }
 }
@@ -1118,7 +1198,7 @@ void UpdateInfluence()
     }
 }
 
-bool PlaceTowerAt(int tileX, int tileY)
+bool PlaceTowerAt(int tileX, int tileY, bool TowerActive)
 {
     // --- Check bounds ---
     if (tileX < 0 || tileX >= GRID_COLS || tileY < 0 || tileY >= GRID_ROWS)
@@ -1141,7 +1221,8 @@ bool PlaceTowerAt(int tileX, int tileY)
             }
         }
         return false; // nothing to remove
-    }
+} 
+    if (!TowerActive) { return false; }
 
     Tile& t = g_pathGrid[tileY][tileX];
 
@@ -1174,11 +1255,11 @@ bool PlaceTowerAt(int tileX, int tileY)
     return true;
 }
 
-bool PlaceTowerAtMouse(int mouseX, int mouseY)
+bool PlaceTowerAtMouse(int mouseX, int mouseY, bool TowerActive)
 {
     int tileX = mouseX / CELL_SIZE;
     int tileY = mouseY / CELL_SIZE;
-    return PlaceTowerAt(tileX, tileY);
+    return PlaceTowerAt(tileX, tileY, TowerActive);
 }
 
 bool IsTileInInfluence(int tileX, int tileY)
@@ -1225,6 +1306,7 @@ void DrawInfluenceOverlay(HDC hdc)
 void UpdateTower(Tower& t, float dt)
 {
 	g_resource += 0.01f; // passive income
+	g_resourceGain += 0.01f; // track gain for UI
     // inside influence
     if (!t.inInf) {
         return;
@@ -1243,6 +1325,7 @@ void UpdateTower(Tower& t, float dt)
         if (g_resource > 0 && g_resource >= buildRate)
         {
             g_resource -= buildRate;
+            g_resourceSpent += buildRate;
             t.costPaid += buildRate;
             if (t.costPaid >= t.costTotal) t.operational = true;
         }
@@ -1270,17 +1353,20 @@ void UpdateTower(Tower& t, float dt)
         // Minimum per-frame gain is t.ammoPerAttack.
         // If there are enemies in range, gain = ammoPerAttack * enemiesInRange.
         int multiplier = (enemiesInRange > 0) ? enemiesInRange : 1;
-        g_resource += t.ammoPerAttack * static_cast<float>(multiplier);
+        float amount = t.ammoPerAttack * static_cast<float>(multiplier);
+        g_resource += amount;
+        g_resourceGain += amount;
     }
 
     // --- 3. Resource-based ammo accumulation ---
     // Example: siphon a small amount of global resource to refill ammo
-    if (t.inInf && t.ammo < t.maxAmmo)
+    if (t.inInf && t.ammo < t.maxAmmo && t.type > 0)
     {
-        float ammoGain = 0.5f; // example: units/frame
+        float ammoGain = 0.75f; // example: units/frame
         if (g_resource >= ammoGain)
         {
             g_resource -= ammoGain;
+			g_resourceSpent += ammoGain;
             t.ammo += ammoGain;
             if (t.ammo > t.maxAmmo) t.ammo = t.maxAmmo;
         }
@@ -1347,7 +1433,7 @@ void CheckKnowledgeUnlock()
                 {
                     if (AcquireNextWorldKnowledge())
                     {
-                        tile.hasKnowledge = false; // consume trigger
+                        tile.hasKnowledge = false; // consume trigger tile
                     }
                     return; // one unlock per tick is enough
                 }
@@ -1585,7 +1671,7 @@ void DrawHUD(HDC hdc)
 {
     Graphics g(hdc);
     const REAL hudTop = static_cast<REAL>(GAME_H);
-    const REAL padding = 10.0f;
+    const REAL padding = 5.0f;
     const REAL panelH = HUD_H - padding * 2;
     const REAL panelW = (GAME_W - padding * 4) / 4.0f;
 
@@ -1599,8 +1685,8 @@ void DrawHUD(HDC hdc)
 
     // Text formatting
     FontFamily ff(L"Segoe UI");
-    Font font(&ff, 16.0f, FontStyleBold);
-    Font smallFont(&ff, 12.0f, FontStyleRegular);
+    Font font(&ff, 12.0f, FontStyleBold);
+    Font smallFont(&ff, 10.0f, FontStyleRegular);
 
     SolidBrush text(Color(255, 255, 255, 255));
     SolidBrush gain(Color(255, 120, 255, 120));
@@ -1609,19 +1695,53 @@ void DrawHUD(HDC hdc)
     wchar_t buffer[128];
 
     // Resource total
-    swprintf_s(buffer, L"Resource: %.1f", g_resource);
+    swprintf_s(buffer, L"Resource: %.2f", g_resource);
     g.DrawString(buffer, -1, &font,
         PointF(economy.x + 10.0f, economy.y + 6.0f), &text);
 
     // Gain per second
-    swprintf_s(buffer, L"%+.2f / sec", g_resourcePerSecond);
+    // Compute per-second values from last sample
+    float gainPerSec = g_resourceGain;   // these are 0 except during sample
+    float spentPerSec = g_resourceSpent;  // if you want last sampled value,
+    // store them in static locals inside UpdateResourceRate instead.
+
+    // Better: recompute from net if needed
+    float net = g_resourcePerSecond;
+
+    // Line 2: +gain   -spent   =
+    wchar_t gainBuffer[64];
+    wchar_t spendBuffer[64];
+
+    swprintf_s(gainBuffer, L"+%.2f", gainPerSec);
+    swprintf_s(spendBuffer, L"-%.2f", spentPerSec);
+
+    REAL rowY = economy.y + 32.0f;
+
+    g.DrawString(gainBuffer, -1, &smallFont,
+        PointF(economy.x + 10.0f, rowY), &gain);
+
+    g.DrawString(spendBuffer, -1, &smallFont,
+        PointF(economy.x + 80.0f, rowY), &loss);
+
+    g.DrawString(L"=", -1, &smallFont,
+        PointF(economy.x + 150.0f, rowY), &text);
+
+    // Line 3: Net
+    wchar_t netBuffer[64];
+    swprintf_s(netBuffer, L"%+.2f", net);
+
+    SolidBrush& netBrush = (net >= 0.0f) ? gain : loss;
+
+    g.DrawString(netBuffer, -1, &smallFont,
+        PointF(economy.x + 10.0f, economy.y + 50.0f), &netBrush);
+    /*swprintf_s(buffer, L"%+.2f / sec", g_resourcePerSecond);
 
     SolidBrush& rateBrush =
         (g_resourcePerSecond >= 0.0f) ? gain : loss;
 
     g.DrawString(buffer, -1, &smallFont,
         PointF(economy.x + 10.0f, economy.y + 32.0f), &rateBrush);
-
+*/
     // BUILD panel: single row of 9 fixed-size squares with equal padding
     const int slots = std::min(9, static_cast<int>(g_knowledge.size()));
     const REAL slotSize = 26.0f;
@@ -1705,15 +1825,21 @@ void DrawHUD(HDC hdc)
 
     // STATUS panel header (reserved space)
     g.DrawString(L"STATUS", -1, &smallFont,
-        PointF(status.x + 10.0f, status.y + 6.0f), &text);
+        PointF(status.x + 10.0f, status.y + 2.0f), &text);
 
     wchar_t pathBuffer[128];
-    swprintf_s(pathBuffer, L"Path: %S",
+    swprintf_s(pathBuffer, L"%S",
         (g_pathIndex >= 0 && g_pathIndex < (int)g_pathFiles.size()) ?
         g_pathFiles[g_pathIndex].c_str() : "N/A");
 
     g.DrawString(pathBuffer, -1, &smallFont,
-        PointF(status.x + 10.0f, status.y + 28.0f), &text);
+        PointF(status.x + 10.0f, status.y + 20.0f), &text);
+    wchar_t completedBuffer[128];
+    swprintf_s(completedBuffer, L"  %d of %d",
+        g_pathIndex + 1, (int)g_pathFiles.size());
+
+    g.DrawString(completedBuffer, -1, &smallFont,
+        PointF(status.x + 10.0f, status.y + 38.0f), &text);
 }
 
 bool isBlocked(int tileX, int tileY)
@@ -1740,7 +1866,7 @@ void RenderStaticWorld(HWND hwnd)
     if (g_background)
     {
         Graphics g(g_backDC);
-        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        g.SetInterpolationMode(InterpolationModeNearestNeighbor);
         g.DrawImage(g_background, 0, 0, GAME_W, GAME_H);
     }
 
@@ -1762,12 +1888,25 @@ void Render(HWND hwnd)
     DrawBullets(g_backDC);
     DrawEnemies(g_backDC);
     // Copy static world to screen
-    BitBlt(
+    // --- Get REAL client size (authoritative) ---
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+
+    int clientW = rc.right - rc.left;
+    int clientH = rc.bottom - rc.top;
+
+    // --- Enable high quality interpolation ---
+    SetStretchBltMode(hdc, HALFTONE);
+    SetBrushOrgEx(hdc, 0, 0, nullptr);
+
+    // --- Present (scale back buffer to window) ---
+    StretchBlt(
         hdc,
         0, 0,
-        g_backW, g_backH,
+        clientW, clientH,
         g_backDC,
         0, 0,
+        g_backW, g_backH,
         SRCCOPY
     );
 
@@ -1838,16 +1977,20 @@ void UpdateResourceRate(float dt)
 {
     g_resourceTimer += dt;
 
-    // Sample once per second
     if (g_resourceTimer >= 1.0f)
     {
-        float delta = g_resource - g_resourceLast;
-        g_resourcePerSecond = delta / g_resourceTimer;
+        float gainPerSec = g_resourceGain / g_resourceTimer;
+        float spentPerSec = g_resourceSpent / g_resourceTimer;
 
-        g_resourceLast = g_resource;
+        g_resourcePerSecond = gainPerSec - spentPerSec;
+
+        // Reset for next sample
+        g_resourceGain = 0.0f;
+        g_resourceSpent = 0.0f;
+
         g_resourceTimer = 0.0f;
     }
-    // Enforce resource bounds to prevent farming/excessive accumulation
+
     if (g_resource > g_resourceCap)
         g_resource = g_resourceCap;
     if (g_resource < 0.0f)
@@ -1906,6 +2049,8 @@ void NextPath()
         g_isOver = true;
         return;
     }
+    // scale difficulty by path progression
+    SelectWave();
     // Rebuild all path-derived data
 	ParsePathOverlay(g_pathGrid);
     BuildDistanceField();
@@ -1920,6 +2065,7 @@ void NextPath()
     g_pathCompleted = false;
     // reset Influence overlay
     UpdateInfluence();
+
     // Wave data for new path
     if (!isRestart)
     {
@@ -1928,10 +2074,15 @@ void NextPath()
 
         if (g_maxWave > g_minWave)
         {
-            selectedWave =
-                g_minWave + (rand() % (g_maxWave - g_minWave + 1));
+            int range = g_maxWave - g_minWave + 1;
+            selectedWave = g_minWave + (rand() % range);
         }
     }
+	// Multi wave system state
+	g_bWaveIndex = 0;
+	g_bWaves = false;
+	g_waveActive = false;
+
     ThisWave(selectedWave);
 // -----------------------------
 // Capture snapshot for restart
@@ -1980,7 +2131,7 @@ bool CheckWinLose(HWND hwnd)
     }
 
     // Win: no enemies left
-    if (!g_waveActive && g_enemies.empty() && !g_pathCompleted) //Check Wave complete
+    if (!g_waveActive && !g_bWaves && g_enemies.empty() && !g_pathCompleted) //Check Wave complete
     {
 		g_pathCompleted = true;
 		//reset wave state for next path
@@ -2020,6 +2171,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         UpdateEnemies(g_deltaTime);
         // Check win/lose immediately
         UpdateWave(g_deltaTime);
+       
         if (CheckWinLose(hwnd))
         {
             // Stop the timer to freeze the game
@@ -2046,7 +2198,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         // numeric keys: '1'..'9' => prototype indices 0..8, '0' => none (-1)
         if (wParam >= '1' && wParam <= '9')
         {
-            g_TowerType = static_cast<int>(wParam - '1'); // '1' -> 0
+            int idx = static_cast<int>(wParam - '1');
+
+            if (idx < (int)g_knowledge.size() && g_knowledge[idx].Active) {
+                g_TowerType = idx;
+                TowerActive = true;
+            }
         }
         else if (wParam == '0')
         {
@@ -2056,7 +2213,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         // numpad support
         if (wParam >= VK_NUMPAD1 && wParam <= VK_NUMPAD9)
         {
-            g_TowerType = static_cast<int>(wParam - VK_NUMPAD1); // NUMPAD1 -> 0
+            int idx = static_cast<int>(wParam - VK_NUMPAD1);
+            if (idx < (int)g_knowledge.size() && g_knowledge[idx].Active) {
+                g_TowerType = idx;
+                TowerActive = true;
+            }
         }
         else if (wParam == VK_NUMPAD0)
         {
@@ -2076,8 +2237,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_MOUSEMOVE:
     {
-        int mx = GET_X_LPARAM(lParam);
-        int my = GET_Y_LPARAM(lParam);
+        int mx = (int)(GET_X_LPARAM(lParam) / g_scale);
+        int my = (int)(GET_Y_LPARAM(lParam) / g_scale);
 
         if (my < GAME_H)
         {
@@ -2113,8 +2274,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_LBUTTONDOWN:
     {
-        int mouseX = GET_X_LPARAM(lParam);
-        int mouseY = GET_Y_LPARAM(lParam);
+        int mouseX = (int)(GET_X_LPARAM(lParam) / g_scale);
+        int mouseY = (int)(GET_Y_LPARAM(lParam) / g_scale);
 
         bool clickedSlot = false;
         if (mouseY >= GAME_H)
@@ -2126,9 +2287,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 if (mouseX >= r.X && mouseX <= r.X + r.Width &&
                     mouseY >= r.Y && mouseY <= r.Y + r.Height)
                 {
-                    // Tower square clicked4
-                    if (g_knowledge[i].Active)
+                    // Tower square clicked
+                    if (g_knowledge[i].Active) {
                         g_TowerType = static_cast<int>(i); // select this tower
+                        TowerActive = true;
+                    }
                     clickedSlot = true;
                     break; // only one square can be clicked
                 }
@@ -2139,7 +2302,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_TowerType = -1;
         }
 
-        PlaceTowerAtMouse(mouseX, mouseY);
+        PlaceTowerAtMouse(mouseX, mouseY, TowerActive);
         return 0;
     }
 
@@ -2164,6 +2327,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 // ------------------------------------------------------------
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
 {
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     // Seed controls spawn positions and wave randomness
     g_rngSeed = (unsigned int)time(nullptr);
     srand(g_rngSeed);
@@ -2187,15 +2351,44 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
     RegisterClass(&wc);
 
     // --- Create window sized to match image ---
-    RECT r = { 0, 0, SCREEN_W, SCREEN_H };
+// --- Get monitor resolution ---
+    HMONITOR hMonitor = MonitorFromPoint({ 0,0 }, MONITOR_DEFAULTTOPRIMARY);
 
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfo(hMonitor, &mi);
+
+    int monitorW = mi.rcMonitor.right - mi.rcMonitor.left;
+    int monitorH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+    // --- Compute uniform scale ---
+    float scaleX = (float)monitorW / SCREEN_W;
+    float scaleY = (float)monitorH / SCREEN_H;
+    float scale = std::min(scaleX, scaleY);
+
+    // Optional: integer scaling for crisp pixels
+    int intScale = (int)scale;
+    if (intScale < 1) intScale = 1;
+    scale = (float)intScale;
+
+    // --- Compute scaled window size ---
+    int windowW = (int)(SCREEN_W * scale);
+    int windowH = (int)(SCREEN_H * scale);
+	g_windowH = windowH;
+	g_windowW = windowW;
+
+    // --- Center window ---
+    int posX = (monitorW - windowW) / 2;
+    int posY = (monitorH - windowH) / 2;
+
+    // --- Create popup window ---
     HWND hwnd = CreateWindow(
         wc.lpszClassName,
         L"",
-        WS_POPUP,   //no border/titlebar
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        r.right - r.left,
-        r.bottom - r.top,
+        WS_POPUP,
+        posX, posY,
+        windowW,
+        windowH,
         nullptr,
         nullptr,
         hInst,
@@ -2238,12 +2431,12 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
     QueryPerformanceFrequency(&g_qpcFreq);
     QueryPerformanceCounter(&g_lastTime);
 
+    InitKnowledge();
     LoadPathFiles();
 	ShufflePaths(); // randomize path order each run
 	g_pathIndex = -1; // will be incremented to 0 in NextPath
 	NextPath(); // load first path and build data structures
 	// Wave data initialization would go here when implemented
-    InitKnowledge();
 
     // --- Back buffer init ---
     InitBackBuffer(hwnd, SCREEN_W, SCREEN_H);
