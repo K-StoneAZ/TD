@@ -767,11 +767,11 @@ void SpawnEnemy(int count = 1, int level = 0) // level 0-4
         {
         case 0: e.speed = 30; e.emissionRadius = 30; e.maxDmg = 3; e.displaySize = 6;
 			e.color = Color(255, 200, 200, 200); e.HP = 10; break;//white
-        case 1: e.speed = 18; e.emissionRadius = 40; e.maxDmg = 4; e.displaySize = 8;
+        case 1: e.speed = 18; e.emissionRadius = 35; e.maxDmg = 4; e.displaySize = 8;
 			e.color = Color(255, 100, 255, 100); e.HP = 20; break;//green
-        case 2: e.speed = 25; e.emissionRadius = 50; e.maxDmg = 5; e.displaySize = 10;
+        case 2: e.speed = 25; e.emissionRadius = 40; e.maxDmg = 5; e.displaySize = 10;
 			e.color = Color(255, 100, 100, 200); e.HP = 30; break;//blue
-        case 3: e.speed = 20; e.emissionRadius = 40; e.maxDmg = 6; e.displaySize = 12;
+        case 3: e.speed = 20; e.emissionRadius = 50; e.maxDmg = 6; e.displaySize = 12;
             e.color = Color(255, 255, 0, 0); e.HP = 40; break;//red
         case 4: e.speed = 19; e.emissionRadius = 60; e.maxDmg = 10; e.displaySize = 16;
 			e.color = Color(255, 255, 0, 255); e.HP = 50; break;//magenta
@@ -1887,6 +1887,7 @@ void Render(HWND hwnd)
     DrawTowers();
     DrawBullets(g_backDC);
     DrawEnemies(g_backDC);
+    DrawHoverHighlight(g_backDC);
     // Copy static world to screen
     // --- Get REAL client size (authoritative) ---
     RECT rc;
@@ -1909,10 +1910,6 @@ void Render(HWND hwnd)
         g_backW, g_backH,
         SRCCOPY
     );
-
-    // ---- Dynamic rendering goes here ----
-    DrawHoverHighlight(hdc);
-    //DrawPathFlow(hdc);
 
     EndPaint(hwnd, &ps);
 }
@@ -2012,7 +2009,7 @@ PathState g_pathState;
 
 void NextPath()
 {
-    int selectedWave = g_minWave;
+    int selectedWave = 0; // get wave for new path (may be overridden by restart logic)
     // --------------------------------
     // RESTART PATH
     // --------------------------------
@@ -2068,6 +2065,7 @@ void NextPath()
 
     // Wave data for new path
     if (!isRestart)
+        SelectWave();
     {
         if (g_maxWave < g_minWave)
             g_maxWave = g_minWave;
