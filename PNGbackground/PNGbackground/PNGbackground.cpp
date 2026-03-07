@@ -77,15 +77,13 @@ bool  g_waveActive = false;
 static int g_minWave = 0; //min wave for this path
 static int g_maxWave = 0; //max wave for this path
 static int g_waves = 0; // number of repeats
-
 static int g_maxWaves = 0; // max waves for this path set by g_knowledge count and g_pathIndex
-
 bool g_bWaves = false; //Between waves
 static float g_bTimer = 0.0f; //Between wave timer
 static float g_bDelay = 0.0f; //Time between waves
 static int g_bToSpawn = 0; //Enemy waves to spawn in this path
 static int g_bWaveIndex = 0; //Current wave index for this path
-float g_WaveDiff = 0.0f; //Wave difficulty multiplier (increases each wave)
+
 // Random seed
 static unsigned int g_rngSeed = 0;
 // Resource Globals
@@ -554,6 +552,10 @@ int GetActiveKnowledgeCount()
         if (k.Active)
             count++;
     }
+    wchar_t buf[128];
+    swprintf_s(buf, L"Active Count: =%2d\n",
+        count);
+    OutputDebugStringW(buf);
     return count;
 }
 
@@ -935,33 +937,34 @@ void ThisWave(int waveNumber)//wave definitions (c-g for wave range, 1-9 for rep
     {
 	case 0:  //(c)Starttime, enemy count, enemy level, spawn interval
         wave = {
-            { 1.5f, 5, 0, 1.5f }// Basic
+            { 1.5f, 10, 0, 1.5f }// Basic
         };
         break;
     case 1: //(d)
         wave = {
-            { 1.5f, 5, 0, 1.0f },
-            { 3.0f, 3, 1, 0.5f }
+			{ 1.5f, 7, 0, 1.0f },// white
+			{ 3.0f, 3, 1, 0.5f } // green
         };
         break;
     case 2: //(e)
         wave = {
-            { 0.0f, 8, 0, 0.0f },
-            { 2.0f, 4, 1, 0.6f },
-            { 4.0f, 2, 2, 1.5f } // burst
+			{ 1.5f, 10, 0, 0.0f },//burst white
+			{ 2.0f, 4, 1, 0.5f }, //green
+            { 4.0f, 2, 2, 1.5f } //blue
         };
         break;
     case 3:  //(f)
         wave = {
-            { 1.5f, 10, 0, 0.6f },
-            { 3.0f, 6, 1, 1.0f },
-            { 6.0f, 2, 3, 6.0f } // mini-boss
+			{ 1.5f, 10, 0, 0.6f }, // white
+			{ 3.0f, 6, 1, 1.0f }, // green
+            { 6.0f, 2, 3, 6.0f }  // boss red
         };
         break;
 	case 4:  //(g)
         wave = {
-            { 2.0f, 3, 1, 1.5f },
-            { 5.0f, 2, 4, 5.0f } // boss
+            { 2.0f, 6, 1, 1.5f },//green
+			{ 4.0f, 4, 2, 3.0f },// boss blue
+            { 6.0f, 2, 4, 5.0f } // boss magenta
         };
 		break;
     }
@@ -971,23 +974,30 @@ void ThisWave(int waveNumber)//wave definitions (c-g for wave range, 1-9 for rep
 void SelectWave()
 {
 	int w_count = GetActiveKnowledgeCount() / 3; // 0-3 based on knowledge
+    int temp = 1 + (g_pathIndex / 9);
 	// Map knowledge count to wave range
-    if (w_count > 3 && g_pathIndex > 9) {
-        g_bToSpawn = 5; // allow hardest wave after certain progress
+    if (w_count > 3 && g_pathIndex >= 9) {
+        g_bToSpawn = 5; // number of waves to spawn
+		g_minWave = 0; g_maxWave = 4; // max strength of waves
+        g_waves = 5 + rand() % (temp);
     }
-    else if (w_count == 3 && g_pathIndex > 9) {
+    else if (w_count == 3 && g_pathIndex >= 7) {
         g_bToSpawn = 4;
+		g_minWave = 0; g_maxWave = 3;
     }
-    else if (w_count == 2 && g_pathIndex > 6) {
+    else if (w_count == 2 && g_pathIndex >= 5) {
         g_bToSpawn = 3;
-		g_minWave = 0; g_maxWave = 3; // exclude hardest waves
+		g_minWave = 0; g_maxWave = 2; // exclude hardest waves
+		g_waves = 3; // repeat waves for more challenge
     }
-    else if (w_count == 1 && g_pathIndex > 4) {
+    else if (w_count == 1 && g_pathIndex > 2) {
         g_bToSpawn = 2;
 		g_minWave = 0; g_maxWave = 1; // easier waves
 		g_waves = 2; // repeats
     }
-    
+    else {
+        g_bToSpawn = 1; g_minWave = 0; g_maxWave = 1; g_waves = 2;
+    }
 }
 
 void UpdateWave(float deltaTime)
@@ -1002,9 +1012,12 @@ void UpdateWave(float deltaTime)
 		// Check if delay is over to start next wave
         if (g_bTimer >= g_bDelay)
         {
-			SelectWave();
             g_bWaves = false;
             int nextWave = g_minWave + (rand() % (g_maxWave - g_minWave + 1));
+            wchar_t buf[32];
+            swprintf_s(buf, L"Next Wave: %d , Rep = %d\n", nextWave, g_waves);
+            OutputDebugStringW(buf);
+
             ThisWave(nextWave);
         }
 
@@ -1061,13 +1074,12 @@ void UpdateWave(float deltaTime)
                 g_bWaves = true;
                 g_bTimer = 0.0f;
 
-                // random delay between 20–45 seconds
-                g_bDelay = 20.0f + (rand() % 26);
+                // random delay between 5 - 15 seconds
+                g_bDelay = 5.0f + (rand() % 11);
             }
         }
     }
 }
-
 //-------------------------------------------------------------
 // Tower System
 //-------------------------------------------------------------
@@ -1677,7 +1689,7 @@ void DrawHUD(HDC hdc)
 
     HudPanel economy{ padding, hudTop + padding, panelW, panelH };
     HudPanel build{ padding * 2 + panelW, hudTop + padding, panelW * 2, panelH };
-    HudPanel status{ padding * 3 + panelW * 3, hudTop + padding, panelW * 3, panelH };
+    HudPanel status{ padding * 3 + panelW * 3, hudTop + padding, panelW, panelH };
 
     DrawHudPanel(g, economy);
     DrawHudPanel(g, build);
@@ -1734,14 +1746,7 @@ void DrawHUD(HDC hdc)
 
     g.DrawString(netBuffer, -1, &smallFont,
         PointF(economy.x + 10.0f, economy.y + 50.0f), &netBrush);
-    /*swprintf_s(buffer, L"%+.2f / sec", g_resourcePerSecond);
 
-    SolidBrush& rateBrush =
-        (g_resourcePerSecond >= 0.0f) ? gain : loss;
-
-    g.DrawString(buffer, -1, &smallFont,
-        PointF(economy.x + 10.0f, economy.y + 32.0f), &rateBrush);
-*/
     // BUILD panel: single row of 9 fixed-size squares with equal padding
     const int slots = std::min(9, static_cast<int>(g_knowledge.size()));
     const REAL slotSize = 26.0f;
@@ -1824,8 +1829,8 @@ void DrawHUD(HDC hdc)
     }
 
     // STATUS panel header (reserved space)
-    g.DrawString(L"STATUS", -1, &smallFont,
-        PointF(status.x + 10.0f, status.y + 2.0f), &text);
+    //g.DrawString(L"STATUS", -1, &smallFont,
+    //    PointF(status.x + 10.0f, status.y + 2.0f), &text);
 
     wchar_t pathBuffer[128];
     swprintf_s(pathBuffer, L"%S",
@@ -1833,12 +1838,19 @@ void DrawHUD(HDC hdc)
         g_pathFiles[g_pathIndex].c_str() : "N/A");
 
     g.DrawString(pathBuffer, -1, &smallFont,
-        PointF(status.x + 10.0f, status.y + 20.0f), &text);
+        PointF(status.x + 10.0f, status.y + 2.0f), &text);
     wchar_t completedBuffer[128];
     swprintf_s(completedBuffer, L"  %d of %d",
         g_pathIndex + 1, (int)g_pathFiles.size());
 
     g.DrawString(completedBuffer, -1, &smallFont,
+        PointF(status.x + 10.0f, status.y + 20.0f), &text);
+
+    wchar_t waveBuffer[64];
+    swprintf_s(waveBuffer, L"Wave: %2d  of %2d",
+        g_bWaveIndex ,g_bToSpawn );
+
+    g.DrawString(waveBuffer, -1, &smallFont,
         PointF(status.x + 10.0f, status.y + 38.0f), &text);
 }
 
@@ -2047,7 +2059,7 @@ void NextPath()
         return;
     }
     // scale difficulty by path progression
-    SelectWave();
+
     // Rebuild all path-derived data
 	ParsePathOverlay(g_pathGrid);
     BuildDistanceField();
@@ -2074,6 +2086,9 @@ void NextPath()
         {
             int range = g_maxWave - g_minWave + 1;
             selectedWave = g_minWave + (rand() % range);
+            wchar_t buf[32];
+            swprintf_s(buf, L"Selected Wave: %d\n", selectedWave);
+            OutputDebugStringW(buf);
         }
     }
 	// Multi wave system state
