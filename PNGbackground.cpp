@@ -2259,8 +2259,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_MOUSEMOVE:
     {
-        int mx = (int)(GET_X_LPARAM(lParam) / g_scaleX);
-        int my = (int)(GET_Y_LPARAM(lParam) / g_scaleY);
+        int mx = (int)(GET_X_LPARAM(lParam));
+        int my = (int)(GET_Y_LPARAM(lParam));
 
         if (my < GAME_H)
         {
@@ -2296,8 +2296,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_LBUTTONDOWN:
     {
-        int mouseX = (int)(GET_X_LPARAM(lParam) / g_scaleX);
-        int mouseY = (int)(GET_Y_LPARAM(lParam) / g_scaleY);
+        int mouseX = (int)(GET_X_LPARAM(lParam));
+        int mouseY = (int)(GET_Y_LPARAM(lParam));
 
         bool clickedSlot = false;
         if (mouseY >= GAME_H)
