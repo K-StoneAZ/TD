@@ -1,0 +1,118 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="framework.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PNGbackground.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="PNGbackground.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="PNGbackground.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="small.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="PNGbackground.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="FantasyStraight.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\attack0.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\attack1.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\attack2.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\barrier0.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\barrier1.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\barrier2.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\siphon0.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\siphon1.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\x64\Debug\siphon2.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\x64\Debug\Path-0.txt" />
+    <Text Include="..\x64\Debug\Path-1.txt" />
+    <Text Include="..\x64\Debug\Path-2.txt" />
+    <Text Include="..\x64\Debug\Path-3.txt" />
+    <Text Include="..\x64\Debug\Path-4.txt" />
+    <Text Include="..\x64\Debug\Path-5.txt" />
+    <Text Include="Path-L-0.txt" />
+    <Text Include="Path-L-1.txt" />
+    <Text Include="Path-LT-0.txt" />
+    <Text Include="Path-R-0.txt" />
+    <Text Include="Path-R-1.txt" />
+    <Text Include="Path-RT-0.txt" />
+    <Text Include="Path-X-0.txt" />
+    <Text Include="Path-L-2.txt" />
+    <Text Include="Path-LR-0.txt" />
+    <Text Include="Path-LT-1.txt" />
+    <Text Include="Path-LT-2.txt" />
+    <Text Include="Path-R-2.txt" />
+    <Text Include="Path-RT-1.txt" />
+    <Text Include="Path-RT-2.txt" />
+    <Text Include="Path-X-1.txt" />
+    <Text Include="Path-X-2.txt" />
+    <Text Include="Path-X-3.txt" />
+    <Text Include="Path-X-4.txt" />
+    <Text Include="Path-X-5.txt" />
+    <Text Include="Path-X-6.txt" />
+    <Text Include="Path-X-7.txt" />
+    <Text Include="Path-L-3.txt" />
+    <Text Include="Path-R-3.txt" />
+    <Text Include="Path-LT-3.txt" />
+    <Text Include="Path-RT-3.txt" />
+    <Text Include="Path-LR-1.txt" />
+    <Text Include="Path-LR-2.txt" />
+    <Text Include="Path-6.txt" />
+    <Text Include="Path-7.txt" />
+    <Text Include="Path-LR-3.txt" />
+    <Text Include="Path-LR-4.txt" />
+  </ItemGroup>
+</Project>
